@@ -19,47 +19,60 @@ require_once('../init.php');
 $error = array();
 $form_error = '';
 
-// Check if user is loggedin, if not need to be here...
-if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); }
+// Check if user is logged in, if not redirect
+if (LOGGEDIN === false) {
+    header('Location: ' . ROOT_URL . 'index.php');
+    exit();
+}
 
-// Check if user is in an clan if not no need to be here...
-if ($userData['clan_id'] == 0) { header('Location: ' . ROOT_URL . 'ingame/clan/index.php'); }
+// Check if user is in a clan, if not redirect
+if ($userData['clan_id'] == 0) {
+    header('Location: ' . ROOT_URL . 'ingame/clan/index.php');
+    exit();
+}
 
-// Check if user has clan access to this page, if not no need to be here..
-if ($userData['clan_level'] < 6) { header('Location: ' . ROOT_URL . 'ingame/clan/index.php'); }
+// Check if user has clan access to this page, if not redirect
+if ($userData['clan_level'] < 6) {
+    header('Location: ' . ROOT_URL . 'ingame/clan/index.php');
+    exit();
+}
 
 // Check if user has submitted the form
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    
-    // Check if money is enterd and if it is valid
-    if (!isset($_POST['amount']) OR empty($_POST['amount'])) {
+    // Check if amount is entered and if it is valid
+    if (empty($_POST['amount'])) {
         $error[] = 'Er is geen bedrag ingevuld!';
-    }
-    elseif (!is_numeric($_POST['amount'])) {
+    } elseif (!is_numeric($_POST['amount'])) {
         $error[] = 'Het bedrag wat is ingegeven is niet numeriek!';
     } else {
-        
-        // Check if the clan got enough money to deposit / withdraw
-        $result = $dbCon->query('SELECT bank, cash, bank_left FROM clans WHERE clan_id = "' . $userData['clan_id'] . '"')->fetch_assoc();
-        // Clan member wants to deposit money
-        if (isset($_POST['deposit'])) {
-            if ($_POST['amount'] > $result['cash']) {
-                $error[] = 'Zoveel heef de clan niet in cash!';
+        // Fetch clan data
+        $stmt = $pdo->prepare('SELECT bank, cash, bank_left FROM clans WHERE clan_id = :clan_id');
+        $stmt->execute(['clan_id' => $userData['clan_id']]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$result) {
+            $error[] = 'Kan clan gegevens niet ophalen!';
+        } else {
+            // Clan member wants to deposit money
+            if (isset($_POST['deposit'])) {
+                if ($_POST['amount'] > $result['cash']) {
+                    $error[] = 'Zoveel heeft de clan niet in cash!';
+                }
+
+                // Check if clan hasn't deposited enough times for one day
+                if ($result['bank_left'] < 1) {
+                    $error[] = 'Je kan vandaag geen stortingen meer naar de clan bank doen!';
+                }
             }
-            
-            // Check if clan hasnt deposit enough times for one day
-            if ($result['bank_left'] < 1) {
-                $error[] = 'Je kan vandaag geen stortingen meer naar de clan bank doen!';
-            }
-        }
-        // Clan member wants to withdraw money
-        else {
-            if ($_POST['amount'] > $result['bank']) {
-                $error[] = 'Zoveel heef de clan niet op de bank staan!';
+            // Clan member wants to withdraw money
+            else {
+                if ($_POST['amount'] > $result['bank']) {
+                    $error[] = 'Zoveel heeft de clan niet op de bank staan!';
+                }
             }
         }
     }
-    
+
     // Check for errors and show them if there are any
     if (count($error) > 0) {
         foreach ($error as $item) {
@@ -70,25 +83,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         // Clan member may deposit / withdraw
         if (isset($_POST['deposit'])) {
             // Clan member is going to deposit money
-            $dbCon->query('UPDATE clans SET cash = (cash - "' . (int) addslashes($_POST['amount']) . '"),
-                                            bank = (bank + "' . (int) addslashes($_POST['amount']) . '"),
-                                            bank_left = (bank_left - )
-                                        WHERE clan_id = "' . $userData['clan_id'] . '" ');
-            
+            $stmt = $pdo->prepare('UPDATE clans SET cash = cash - :amount, bank = bank + :amount, bank_left = bank_left - 1 WHERE clan_id = :clan_id');
+            $stmt->execute([
+                'amount' => (int)$_POST['amount'],
+                'clan_id' => $userData['clan_id']
+            ]);
+
             $tpl->assign('success', 'Je hebt succesvol geld op de clan bank gezet!');
         } else {
-             // Clan member is going to withdraw money
-            $dbCon->query('UPDATE clans SET cash = (cash + "' . (int) addslashes($_POST['amount']) . '"),
-                                            bank = (bank - "' . (int) addslashes($_POST['amount']) . '")
-                                        WHERE clan_id = "' . $userData['clan_id'] . '" ');
-            
+            // Clan member is going to withdraw money
+            $stmt = $pdo->prepare('UPDATE clans SET cash = cash + :amount, bank = bank - :amount WHERE clan_id = :clan_id');
+            $stmt->execute([
+                'amount' => (int)$_POST['amount'],
+                'clan_id' => $userData['clan_id']
+            ]);
+
             $tpl->assign('success', 'Je hebt succesvol geld van de clan bank gehaald!');
         }
     }
 }
 
 // Give general information
-$result = $dbCon->query('SELECT cash, bank, bank_left FROM clans WHERE clan_id = "' . $userData['clan_id'] . '"')->fetch_assoc();
+$stmt = $pdo->prepare('SELECT cash, bank, bank_left FROM clans WHERE clan_id = :clan_id');
+$stmt->execute(['clan_id' => $userData['clan_id']]);
+$result = $stmt->fetch(PDO::FETCH_ASSOC);
+
 $tpl->assign('cash', $result['cash']);
 $tpl->assign('bank', $result['bank']);
 $tpl->assign('deposit_left', $result['bank_left']);

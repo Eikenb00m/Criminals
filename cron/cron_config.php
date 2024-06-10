@@ -16,5 +16,25 @@
 
 require_once('../init.php');
 
-// Define allow IP's to run cronjobs
+// Define allowed IPs to run cronjobs
 define('ALLOWED_IP', '127.0.0.1');
+
+// Check if the script is accessed from an allowed IP
+if ($_SERVER['REMOTE_ADDR'] !== ALLOWED_IP) {
+    http_response_code(403);
+    echo 'Access denied';
+    exit();
+}
+
+// The rest of your cron job code would go here
+
+// Example placeholder for future PDO usage
+try {
+    $stmt = $pdo->query('SELECT NOW()');
+    $currentTime = $stmt->fetchColumn();
+    echo "Current server time: $currentTime";
+} catch (PDOException $e) {
+    error_log('Database error: ' . $e->getMessage());
+    http_response_code(500);
+    echo 'Internal server error';
+}

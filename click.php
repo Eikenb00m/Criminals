@@ -14,9 +14,10 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>. 
  */
 
-require_once('init.php');
+require_once('init.php'); // Zorg ervoor dat init.php je config.inc.php bevat en de juiste autoloaders
+require_once('config.inc.php');
 
-$text = array(  
+$text = array(
     '',
     array('intro' => '%username% geeft je een plastic zakje...', 'resultText' => 'Je neemt het zakje aan en ziet dat er wit poeder in zit. Wanneer je
                                                                        aan dit poeder ruikt, komt er een vreemd gevoel over je heen.
@@ -31,27 +32,29 @@ $text = array(
                                                                    in een wagen gegooid. Na een paar uur rijden wordt de
                                                                    blindoek weggehaald, en je ziet dat je op een trainings-basis
                                                                    bent!', 'type' => 'agenten')
-); 
-
+);
 
 // Check if id is entered, if not give error
 if (!isset($_GET['id'])) {
     $tpl->assign('error', 'user id niet gevonden!');
 } else {
+    $pdo = getPDOConnection();
+    $userId = $_GET['id'];
     
     // Check if id exists
-    $result = $dbCon->query('SELECT * FROM users WHERE id = "' . addslashes($_GET['id']) . '"');
-    if ($result->num_rows < 1) {
+    $stmt = $pdo->prepare('SELECT * FROM users WHERE id = :id');
+    $stmt->execute(['id' => $userId]);
+    $userData = $stmt->fetch();
+
+    if (!$userData) {
         $tpl->assign('error', 'Gebruiker niet gevonden!');
     } else {
-        
         // check if already clicked today
-        $userData = $result->fetch_assoc();
         $tpl->assign($userData);
         
-        $result = $dbCon->query('SELECT clicked_ip FROM clicks WHERE clicked_ip = "' . addslashes($_SERVER['REMOTE_ADDR']) . '" AND
-                                                                     userid = "' . $userData['id'] . '" LIMIT 1');
-        $rowCount = $result->num_rows;
+        $stmt = $pdo->prepare('SELECT clicked_ip FROM clicks WHERE clicked_ip = :clicked_ip AND userid = :userid LIMIT 1');
+        $stmt->execute(['clicked_ip' => $_SERVER['REMOTE_ADDR'], 'userid' => $userData['id']]);
+        $rowCount = $stmt->rowCount();
     
         // check if button is pressed
         if ($_SERVER['REQUEST_METHOD'] == 'POST' && $rowCount < 1) {
@@ -59,8 +62,11 @@ if (!isset($_GET['id'])) {
             $tpl->assign('clickType', $text[$userData['type']]['type']);
             $tpl->assign('clicked', true);
 
-            $dbCon->query('INSERT INTO clicks (userid, clicked_ip) VALUES ("' . $userData['id'] . '", "' . addslashes($_SERVER['REMOTE_ADDR']) . '")');
-            $dbCon->query('UPDATE users SET clicks_today = (clicks_today + 1) AND clicks = (clicks + 1) WHERE session_id = "' . $userData['session_id'] . '"');
+            $stmt = $pdo->prepare('INSERT INTO clicks (userid, clicked_ip) VALUES (:userid, :clicked_ip)');
+            $stmt->execute(['userid' => $userData['id'], 'clicked_ip' => $_SERVER['REMOTE_ADDR']]);
+
+            $stmt = $pdo->prepare('UPDATE users SET clicks_today = clicks_today + 1, clicks = clicks + 1 WHERE session_id = :session_id');
+            $stmt->execute(['session_id' => $userData['session_id']]);
         
         // check for click today already done for the id
         } elseif ($rowCount > 0) {
@@ -76,3 +82,4 @@ if (!isset($_GET['id'])) {
 }
 
 $tpl->display('click.tpl');
+?>

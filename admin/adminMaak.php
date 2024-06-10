@@ -16,35 +16,44 @@
 
 require_once('../init.php');
 
-// Check if user is loggedin, if so no need to be here...
-if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); }
-if ($userData['level'] < 10) { header('Location: ' . ROOT_URL . '/ingame/index.php'); }
+// Check if user is logged in, if not redirect
+if (LOGGEDIN === false) { 
+    header('Location: ' . ROOT_URL . 'index.php'); 
+    exit();
+}
+
+// Check if user has admin privileges
+if ($userData['level'] < 10) { 
+    header('Location: ' . ROOT_URL . '/ingame/index.php'); 
+    exit();
+}
 
 $error = array();
 $form_error = "";
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     
-    // admin wants to add a new admin
-    if (!isset($_POST['user']) OR empty($_POST['user'])) {
+    // Admin wants to add a new admin
+    if (empty($_POST['user'])) {
         $error[] = 'Je hebt geen speler ingevoerd.';
     } else {
-        $result = $dbCon->query('SELECT username, level, id FROM users WHERE username = "' . addslashes($_POST['user']) . '" LIMIT 1')->num_rows;
-        if ($result < 1) {
+        $stmt = $pdo->prepare('SELECT username, level, id FROM users WHERE username = :username LIMIT 1');
+        $stmt->execute(['username' => $_POST['user']]);
+        if ($stmt->rowCount() < 1) {
             $error[] = 'De ingegeven gebruiker bestaat niet!';
         }
     }
     
-    if (!isset($_POST['level']) OR empty($_POST['level'])) {
+    if (empty($_POST['level'])) {
         $error[] = 'Je hebt geen niveau aangegeven!';
     } else {
-        if ($_POST['level'] < 0 OR $_POST['level'] > 10) {
+        if ($_POST['level'] < 0 || $_POST['level'] > 10) {
             $error[] = 'Het level wat je hebt aangegeven is niet correct!';
-        } 
+        }
     }
     
     if ($_POST['user'] == $userData['username']) {
-        $error[] = 'Je kan je zelf niet aanpassen!';
+        $error[] = 'Je kan jezelf niet aanpassen!';
     }
     
     if (count($error) > 0) {
@@ -53,10 +62,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
         $tpl->assign('form_error', $form_error);
     } else {
-        if ($_POST['level'] == 'cnul') { $level = 0; }
-        else { $level = $_POST['level']; }
+        $level = ($_POST['level'] == 'cnul') ? 0 : $_POST['level'];
         
-        $dbCon->query('UPDATE users SET level = "' . addslashes($_POST['level']) . '" WHERE username = "' . addslashes($_POST['user']) . '"');
+        $stmt = $pdo->prepare('UPDATE users SET level = :level WHERE username = :username');
+        $stmt->execute(['level' => $level, 'username' => $_POST['user']]);
+        
         $tpl->assign('success', 'Je hebt succesvol de toegang van ' . $_POST['user'] . ' aangepast naar niveau ' . $_POST['level'] . '!');
     }
 }

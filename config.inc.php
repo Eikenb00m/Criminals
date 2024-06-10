@@ -18,9 +18,33 @@
 DEFINE('SQL_HOSTNAME', 'localhost'); // host, most of the time localhost
 DEFINE('SQL_USERNAME', ''); // put username of the database here
 DEFINE('SQL_PASSWORD', ''); // put password of the database here
-DEFINE('SQL_DATABASE', ''); // put the databasen name here
+DEFINE('SQL_DATABASE', ''); // put the database name here
 
-DEFINE('ROOT_URL', ''); // write the url of your website here
-DEFINE('ROOT_EMAIL', ''); //write the email here
+DEFINE('ROOT_URL', ''); // write the URL of your website here
+DEFINE('ROOT_EMAIL', ''); // write the email here
 
-DEFINE('WEBSITE_NAME', 'Criminals'); //set the name here
+DEFINE('WEBSITE_NAME', 'Criminals'); // set the name here
+
+// Create a PDO connection function
+function getPDOConnection() {
+    $host = SQL_HOSTNAME;
+    $db = SQL_DATABASE;
+    $user = SQL_USERNAME;
+    $pass = SQL_PASSWORD;
+    $charset = 'utf8mb4';
+
+    $dsn = "mysql:host=$host;dbname=$db;charset=$charset";
+    $options = [
+        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES   => false,
+    ];
+
+    try {
+        $pdo = new PDO($dsn, $user, $pass, $options);
+        return $pdo;
+    } catch (\PDOException $e) {
+        throw new \PDOException($e->getMessage(), (int)$e->getCode());
+    }
+}
+?>

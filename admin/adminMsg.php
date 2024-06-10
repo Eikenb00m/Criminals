@@ -16,23 +16,36 @@
 
 require_once('../init.php');
 
-// Check if user is loggedin, if so no need to be here...
-if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); }
-if ($userData['level'] < 3) { header('Location: ' . ROOT_URL . '/ingame/index.php'); }
+// Check if user is logged in and has admin privileges
+if (LOGGEDIN === false) {
+    header('Location: ' . ROOT_URL . 'index.php');
+    exit();
+}
+
+if ($userData['level'] < 3) {
+    header('Location: ' . ROOT_URL . '/ingame/index.php');
+    exit();
+}
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    
-    // admin wants to mass message players
+    // Admin wants to mass message players
     if (isset($_POST['massMsg'])) {
-        if (isset($_POST['message']) && !empty($_POST['message'])) {
-            if (isset($_POST['subject']) && !empty($_POST['subject'])) {
-                $result = $dbCon->query('SELECT id FROM users');
-                while ($row = $result->fetch_assoc()) {
-                    $dbCon->query('INSERT INTO messages (message_from_id , message_to_id, message_subject, message_message) VALUES (
-                                                        "' . $userData['id'] . '", "' . $row['id'] . '", "' . addslashes($_POST['subject']) . '",
-                                                        "' . nl2br(addslashes($_POST['message']) . '")')) or die(mysqli_error($dbCon));
-                    
+        if (!empty($_POST['message'])) {
+            if (!empty($_POST['subject'])) {
+                try {
+                    $stmt = $pdo->query('SELECT id FROM users');
+                    $messageStmt = $pdo->prepare('INSERT INTO messages (message_from_id, message_to_id, message_subject, message_message) VALUES (:from_id, :to_id, :subject, :message)');
+                    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                        $messageStmt->execute([
+                            'from_id' => $userData['id'],
+                            'to_id' => $row['id'],
+                            'subject' => $_POST['subject'],
+                            'message' => nl2br($_POST['message'])
+                        ]);
+                    }
                     $tpl->assign('success', 'Het bericht is verstuurd naar alle spelers');
+                } catch (PDOException $e) {
+                    $tpl->assign('error', 'Er is een fout opgetreden: ' . $e->getMessage());
                 }
             } else {
                 $tpl->assign('error', 'Er is geen onderwerp ingegeven');

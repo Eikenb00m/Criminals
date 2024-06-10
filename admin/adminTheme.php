@@ -19,36 +19,43 @@ require_once('../init.php');
 $error = array();
 $form_error = '';
 
-// Check if user is loggedin, if so no need to be here...
-if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); }
-if ($userData['level'] < 10) { header('Location: ' . ROOT_URL . '/ingame/index.php'); }
+// Check if user is logged in, if not redirect
+if (LOGGEDIN === false) {
+    header('Location: ' . ROOT_URL . 'index.php');
+    exit();
+}
+
+// Check if user has admin privileges
+if ($userData['level'] < 10) {
+    header('Location: ' . ROOT_URL . '/ingame/index.php');
+    exit();
+}
 
 // Themes list
 $themes = array('blue', 'begangster');
 $tpl->assign('themes', $themes);
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    
-    // admin wants to mass message players
-    if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-        if (!isset($_POST['theme']) OR empty($_POST['theme'])) {
-            $error[] = 'Geen ander thema opgegeven!';
-        } else {
-            if (!in_array($_POST['theme'], $themes)) {
-                $error[] = 'Dit thema bestaat niet!';
-            }
+    if (empty($_POST['theme'])) {
+        $error[] = 'Geen ander thema opgegeven!';
+    } elseif (!in_array($_POST['theme'], $themes)) {
+        $error[] = 'Dit thema bestaat niet!';
+    }
+
+    // Check for errors, if there are any show them
+    if (count($error) > 0) {
+        foreach ($error as $item) {
+            $form_error .= '- ' . $item . '<br />';
         }
-        
-        // Check for errors, if there are any show them
-        if (count($error) > 0) {
-            foreach ($error as $item) {
-                $form_error .= '- ' . $item . '<br />';
-            }
-            $tpl->assign('form_error', $form_error);
-        } else {
-           // admin is going to change the theme
-           $dbCon->query('UPDATE settings SET setting_value = "' . addslashes($_POST['theme']) . '" WHERE setting_id = 3');
-           $tpl->assign('success', 'Het thema is succesvol gewijzigd!');
+        $tpl->assign('form_error', $form_error);
+    } else {
+        // Admin is going to change the theme
+        try {
+            $stmt = $pdo->prepare('UPDATE settings SET setting_value = :theme WHERE setting_id = 3');
+            $stmt->execute(['theme' => $_POST['theme']]);
+            $tpl->assign('success', 'Het thema is succesvol gewijzigd!');
+        } catch (PDOException $e) {
+            $tpl->assign('error', 'Er is een fout opgetreden bij het wijzigen van het thema: ' . $e->getMessage());
         }
     }
 }

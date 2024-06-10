@@ -17,11 +17,16 @@ require_once('init.php');
 
 $error = '';
 
-// Check if user is not loggedin, no need to be here...
-if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'ingame/index.php'); }
-$sessionid = addslashes($_COOKIE['game_session_id']);
+// Check if user is not logged in, no need to be here...
+if (LOGGEDIN === false) {
+    header('Location: ' . ROOT_URL . 'ingame/index.php');
+    exit();
+}
 
-$dbCon->query('UPDATE users SET session_id = "" AND online_time = "" WHERE session_id = "' . $sessionid . '"');
+$sessionId = $_COOKIE['game_session_id'];
 
-setcookie('game_session_id', null, -1, '/');
+$stmt = $pdo->prepare('UPDATE users SET session_id = "", online_time = "" WHERE session_id = :session_id');
+$stmt->execute(['session_id' => $sessionId]);
+
+setcookie('game_session_id', '', time() - 3600, '/');
 $tpl->display('logout.tpl');

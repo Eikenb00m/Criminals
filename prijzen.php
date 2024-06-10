@@ -16,8 +16,18 @@
 
 require_once('init.php');
 
-$result = $dbCon->query('SELECT setting_value FROM settings WHERE setting_name = "price" LIMIT 1');
-$row = $result->fetch_assoc();
+try {
+    $stmt = $pdo->prepare('SELECT setting_value FROM settings WHERE setting_name = :setting_name LIMIT 1');
+    $stmt->execute(['setting_name' => 'price']);
+    $row = $stmt->fetch();
 
-$tpl->assign('price', $row['setting_value']);
+    if ($row) {
+        $tpl->assign('price', $row['setting_value']);
+    } else {
+        $tpl->assign('error', 'Price setting not found.');
+    }
+} catch (PDOException $e) {
+    $tpl->assign('error', 'Database error: ' . $e->getMessage());
+}
+
 $tpl->display('prijzen.tpl');

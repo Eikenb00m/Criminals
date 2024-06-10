@@ -14,17 +14,21 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>. 
  */
  
- // check if installation folder is still availible
+// Check if the installation folder is still available
 if (file_exists('install/index.php')) {
-	header('Location: install/');
-	exit();
+    header('Location: install/');
+    exit();
 }
 
-// launch index
+// Launch index
 require_once('init.php');
 
-// Check if user is loggedin, if so no need to be here...
-if (LOGGEDIN == TRUE) { header('Location: ' . ROOT_URL . 'ingame/index.php'); }
+// Check if user is logged in, if so no need to be here...
+if (defined('LOGGEDIN') && LOGGEDIN === true) {
+    header('Location: ' . ROOT_URL . 'ingame/index.php');
+    exit();
+}
 
 // Show index page
 $tpl->display('index.tpl');
+?>

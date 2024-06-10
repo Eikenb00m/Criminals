@@ -15,28 +15,56 @@
  */
 require_once('cron_config.php');
 
+// Check if the script is accessed from an allowed IP
+if ($_SERVER['REMOTE_ADDR'] !== ALLOWED_IP) {
+    http_response_code(403);
+    die('No direct access...');
+}
 
-$winningHorse = rand(1,50);
+$winningHorse = rand(1, 50);
 $jackpot = 0;
 $gamblers = 0;
 $multiply = 0;
 
-// Calculate total jackpot
-$result = $dbCon->query('SELECT * FROM temp WHERE area = "horse"');
-while ($row = $result->fetch_assoc()) {
-    $jackpot += 20000;
-    $gamblers++;
-}
+try {
+    // Calculate total jackpot
+    $stmt = $pdo->query('SELECT * FROM temp WHERE area = "horse"');
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $jackpot += 20000;
+        $gamblers++;
+    }
 
-// Calculate gains and add them to the bank
-$result = $dbCon->query('SELECT * FROM temp WHERE area = "horse"');
-while ($row = $result->fetch_assoc()) {
-    if ($row['extra'] == 3) { $multiply = 1; }
-    if ($row['extra'] == 2) { $multiply = 0.5; }
-    if ($row['extra'] == 1) { $multiply = 0.25; }
+    // Calculate gains and add them to the bank
+    $stmt = $pdo->query('SELECT * FROM temp WHERE area = "horse"');
+    $updateStmt = $pdo->prepare('UPDATE users SET bank = bank + :amount WHERE id = :user_id');
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        switch ($row['extra']) {
+            case 3:
+                $multiply = 1;
+                break;
+            case 2:
+                $multiply = 0.5;
+                break;
+            case 1:
+                $multiply = 0.25;
+                break;
+            default:
+                $multiply = 0;
+        }
+
+        $amount = floor($jackpot / $gamblers * (25 * pow(2, $multiply)));
+        $updateStmt->execute([
+            'amount' => $amount,
+            'user_id' => $row['user_id']
+        ]);
+    }
+
+    // Clear horse race bets
+    $pdo->query('DELETE FROM temp WHERE area = "horse"');
     
-    $amount = floor($jackpot / $gamblers * (25 * pow(2, $multiply)));
-    $dbCon->query('UPDATE users SET bank = (bank + "' . $amount . '" WHERE id = "' . $row['user_id'] . '"');
+    echo "Cron job executed successfully.";
+} catch (PDOException $e) {
+    error_log('Database error: ' . $e->getMessage());
+    http_response_code(500);
+    echo 'Internal server error';
 }
-
-$dbCon->query('DELETE FROM temp WHERE area = "horse"');

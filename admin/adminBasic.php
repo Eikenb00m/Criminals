@@ -16,64 +16,73 @@
 
 require_once('../init.php');
 
-// Check if user is loggedin, if so no need to be here...
-if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); }
-if ($userData['level'] < 3) { header('Location: ' . ROOT_URL . '/ingame/index.php'); }
+// Check if user is logged in and has admin privileges
+if (LOGGEDIN === false) {
+    header('Location: ' . ROOT_URL . 'index.php');
+    exit();
+}
+if ($userData['level'] < 3) {
+    header('Location: ' . ROOT_URL . '/ingame/index.php');
+    exit();
+}
 
 $error = array();
 $form_error = '';
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST' OR $_SERVER['REQUEST_METHOD'] == 'GET') {
-    
-    // admin wants to reset user
-    if (isset($_POST['reset']) OR isset($_GET['reset'])) {
-        
-        if (isset($_POST['player']) OR isset($_GET['player'])) {
-            $player = (isset($_POST['player']) ? $_POST['player'] : $_GET['player']);
-            
-            $result = $dbCon->query('SELECT * FROM users WHERE username = "' . addslashes($player) . '" LIMIT 1');
-            if ($result->num_rows != 1) {
+if ($_SERVER['REQUEST_METHOD'] == 'POST' || $_SERVER['REQUEST_METHOD'] == 'GET') {
+    // Admin wants to reset user
+    if (isset($_POST['reset']) || isset($_GET['reset'])) {
+        if (isset($_POST['player']) || isset($_GET['player'])) {
+            $player = isset($_POST['player']) ? $_POST['player'] : $_GET['player'];
+            $stmt = $pdo->prepare('SELECT * FROM users WHERE username = :username LIMIT 1');
+            $stmt->execute(['username' => $player]);
+
+            if ($stmt->rowCount() != 1) {
                 $tpl->assign('error', 'Speler is niet gevonden.');
             } else {
                 if (isset($_GET['sureReset'])) {
-                    $playerData = $result->fetch_assoc();
-                    $dbCon->query('DELETE FROM users WHERE id = "' . $playerData['id'] . '"');
-                    $dbCon->query('DELETE FROM temp WHERE userid = "' . $playerData['id'] . '"');
-                    
-                    $dbCon->query('INSERT INTO users (username, password, email, type)
-                                   VALUES ("' . $playerData['username'] . '", "' . $playerData['password'] . '", "' . $playerData['email'] . '", "' . $playerData['type'] . '")');
-                    
-                    $tpl->assign('success', 'De speler ' . $player . ' is succesvol gereset!');
+                    $playerData = $stmt->fetch();
+                    $pdo->beginTransaction();
+                    try {
+                        $pdo->prepare('DELETE FROM users WHERE id = :id')->execute(['id' => $playerData['id']]);
+                        $pdo->prepare('DELETE FROM temp WHERE userid = :userid')->execute(['userid' => $playerData['id']]);
+                        $pdo->prepare('INSERT INTO users (username, password, email, type) VALUES (:username, :password, :email, :type)')
+                            ->execute(['username' => $playerData['username'], 'password' => $playerData['password'], 'email' => $playerData['email'], 'type' => $playerData['type']]);
+                        $pdo->commit();
+                        $tpl->assign('success', 'De speler ' . $player . ' is succesvol gereset!');
+                    } catch (PDOException $e) {
+                        $pdo->rollBack();
+                        $tpl->assign('error', 'Er is een fout opgetreden bij het resetten van de speler: ' . $e->getMessage());
+                    }
                 } else {
-                    $tpl->assign('info', 'Weet je het zeker dat je speler ' . $player . ' wilt resetten? Klik '
-                            . ' <a href="' . ROOT_URL .'admin/adminBasic.php?reset=true&sureReset=true&player=' . $player . '">hier</a> als je het zeker weet!');
+                    $tpl->assign('info', 'Weet je het zeker dat je speler ' . $player . ' wilt resetten? Klik <a href="' . ROOT_URL . 'admin/adminbasic.php?reset=true&sureReset=true&player=' . $player . '">hier</a> als je het zeker weet!');
                     $tpl->assign('player', $player);
                 }
             }
         } else {
-            
             $tpl->assign('error', 'Geen spelernaam opgegeven');
         }
     }
-    
-    // admin wants to donate to user
-    if (isset($_POST['donate']) OR (isset($_GET['donate']) AND isset($_GET['amount']))) {
-        if (isset($_POST['player']) OR isset($_GET['player'])) {
-            $player = (isset($_POST['player']) ? $_POST['player'] : $_GET['player']);
-            
-            $result = $dbCon->query('SELECT * FROM users WHERE username = "' . addslashes($player) . '" LIMIT 1');
-            if ($result->num_rows != 1) {
+
+    // Admin wants to donate to user
+    if (isset($_POST['donate']) || (isset($_GET['donate']) && isset($_GET['amount']))) {
+        if (isset($_POST['player']) || isset($_GET['player'])) {
+            $player = isset($_POST['player']) ? $_POST['player'] : $_GET['player'];
+            $stmt = $pdo->prepare('SELECT * FROM users WHERE username = :username LIMIT 1');
+            $stmt->execute(['username' => $player]);
+
+            if ($stmt->rowCount() != 1) {
                 $tpl->assign('error', 'Speler is niet gevonden.');
             } else {
-                if (isset($_POST['amount']) OR isset($_GET['amount'])) {
-                    $amount = (isset($_POST['amount']) ? $_POST['amount'] : $_GET['amount']);
+                if (isset($_POST['amount']) || isset($_GET['amount'])) {
+                    $amount = isset($_POST['amount']) ? $_POST['amount'] : $_GET['amount'];
                     if (is_numeric($amount)) {
-                        $dbCon->query('UPDATE users SET bank = (bank + "' . (int) $amount . '") WHERE username = "' . addslashes($player) . '"');
+                        $pdo->prepare('UPDATE users SET bank = bank + :amount WHERE username = :username')
+                            ->execute(['amount' => (int)$amount, 'username' => $player]);
                         $tpl->assign('success', 'De speler ' . $player . ' heeft ' . $amount . ' op zijn bank erbij gekregen!');
                     } else {
                         $tpl->assign('error', 'Het ingegeven bedrag is niet numeriek.');
                         $tpl->assign('player', $player);
-                        
                     }
                 } else {
                     $tpl->assign('error', 'Geen bedrag ingevoerd voor donatie.');
@@ -84,25 +93,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' OR $_SERVER['REQUEST_METHOD'] == 'GET')
             $tpl->assign('error', 'Geen spelernaam opgegeven');
         }
     }
-    
-    // admin wants to delete user
-    if (isset($_POST['delete']) OR isset($_GET['delete'])) {
-        if (isset($_POST['player']) OR isset($_GET['player'])) {
-            $player = (isset($_POST['player']) ? $_POST['player'] : $_GET['player']);
-            
-            $result = $dbCon->query('SELECT * FROM users WHERE username = "' . addslashes($player) . '" LIMIT 1');
-            if ($result->num_rows != 1) {
+
+    // Admin wants to delete user
+    if (isset($_POST['delete']) || isset($_GET['delete'])) {
+        if (isset($_POST['player']) || isset($_GET['player'])) {
+            $player = isset($_POST['player']) ? $_POST['player'] : $_GET['player'];
+            $stmt = $pdo->prepare('SELECT * FROM users WHERE username = :username LIMIT 1');
+            $stmt->execute(['username' => $player]);
+
+            if ($stmt->rowCount() != 1) {
                 $tpl->assign('error', 'Speler is niet gevonden.');
             } else {
                 if (isset($_GET['sureDelete'])) {
-                    $playerData = $result->fetch_assoc();
-                    $dbCon->query('DELETE FROM users WHERE id = "' . $playerData['id'] . '"');
-                    $dbCon->query('DELETE FROM temp WHERE userid = "' . $playerData['id'] . '"');
-                    
-                    $tpl->assign('success', 'De speler ' . $player . ' is succesvol verwijderd!');
+                    $playerData = $stmt->fetch();
+                    $pdo->beginTransaction();
+                    try {
+                        $pdo->prepare('DELETE FROM users WHERE id = :id')->execute(['id' => $playerData['id']]);
+                        $pdo->prepare('DELETE FROM temp WHERE userid = :userid')->execute(['userid' => $playerData['id']]);
+                        $pdo->commit();
+                        $tpl->assign('success', 'De speler ' . $player . ' is succesvol verwijderd!');
+                    } catch (PDOException $e) {
+                        $pdo->rollBack();
+                        $tpl->assign('error', 'Er is een fout opgetreden bij het verwijderen van de speler: ' . $e->getMessage());
+                    }
                 } else {
-                    $tpl->assign('error', 'Weet je het zeker dat je speler ' . $player . ' wilt verwijderen? Klik '
-                                  . ' <a href="' . ROOT_URL .'admin/adminBasic.php?delete=true&sureDelete=true&player=' . $player . '">hier</a> als je het zeker weet!');
+                    $tpl->assign('error', 'Weet je het zeker dat je speler ' . $player . ' wilt verwijderen? Klik <a href="' . ROOT_URL . 'admin/adminbasic.php?delete=true&sureDelete=true&player=' . $player . '">hier</a> als je het zeker weet!');
                     $tpl->assign('player', $player);
                 }
             }

@@ -16,8 +16,18 @@
 
 require_once('init.php');
 
-$result = $dbCon->query('SELECT setting_value FROM settings WHERE setting_name = "rules" LIMIT 1');
-$row = $result->fetch_assoc();
+try {
+    $stmt = $pdo->prepare('SELECT setting_value FROM settings WHERE setting_name = :setting_name LIMIT 1');
+    $stmt->execute(['setting_name' => 'rules']);
+    $row = $stmt->fetch();
 
-$tpl->assign('rules', $row['setting_value']);
+    if ($row) {
+        $tpl->assign('rules', $row['setting_value']);
+    } else {
+        $tpl->assign('error', 'Rules setting not found.');
+    }
+} catch (PDOException $e) {
+    $tpl->assign('error', 'Database error: ' . $e->getMessage());
+}
+
 $tpl->display('rules.tpl');

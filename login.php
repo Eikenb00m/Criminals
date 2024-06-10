@@ -18,36 +18,36 @@ require_once('init.php');
 $formError = array();
 $error = '';
 
-// Check if user is loggedin, if so no need to be here...
-if (LOGGEDIN == TRUE) { header('Location: ' . ROOT_URL . 'ingame/index.php'); }
+// Check if user is logged in, if so no need to be here...
+if (LOGGEDIN === true) { 
+    header('Location: ' . ROOT_URL . 'ingame/index.php'); 
+    exit();
+}
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-     if ($_POST['login'] == null) {
+    if (empty($_POST['login'])) {
         $formError[] = 'Gebruikersnaam is niet ingevuld.';
     }
-    
-    if ($_POST['password'] == null) {
+
+    if (empty($_POST['password'])) {
         $formError[] = 'Wachtwoord is niet ingevuld.';
     }
-    if ($_POST['login'] != null AND $_POST['password'] != null) {
-        
-        $result = $dbCon->query('SELECT username, password FROM users WHERE username = "' . addslashes($_POST['login']) . '"');
-        
-        if (mysqli_error($dbCon)) {
-             $sysError[] = 'Query failed...';
-             $formError[] = 'Er is een technische fout ontstaan';
+
+    if (!empty($_POST['login']) && !empty($_POST['password'])) {
+        $stmt = $pdo->prepare('SELECT username, password FROM users WHERE username = :username');
+        $stmt->execute(['username' => $_POST['login']]);
+        $fetch = $stmt->fetch();
+
+        if (!$fetch) {
+            $formError[] = 'Gebruikersnaam of wachtwoord is incorrect.';
         } else {
-            if ($result->num_rows == 0) {
+            // check if user hash is correct
+            if (!hash_equals($fetch['password'], crypt($_POST['password'], $fetch['password']))) {
                 $formError[] = 'Gebruikersnaam of wachtwoord is incorrect.';
-            } else {
-                // check if user hash is correct
-                $fetch = $result->fetch_assoc();
-                if (!hash_equals($fetch['password'], crypt($_POST['password'], $fetch['password']))) {
-                    $formError[] = 'Gebruikersnaam of wachtwoord is incorrect.';
-                }
             }
         }
     }
+
     if (count($formError) > 0) {
         foreach ($formError as $key => $value) {
             $error .= '- ' . $value . '<br />';
@@ -57,19 +57,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     } else {
         $characters = 'abcdefghijklmnopqrstuvwxyz0123456789';
         $sessionId = '';
-        
+
         for ($i = 0; $i < 20; $i++) {
-             $sessionId .= $characters[rand(0, strlen($characters) - 1)];
+            $sessionId .= $characters[rand(0, strlen($characters) - 1)];
         }
-        
+
         $sessionId = sha1($sessionId);
         setcookie('game_session_id', $sessionId, time() + 86400, '/');
-        
-        $dbCon->query('UPDATE users SET session_id = "' . $sessionId . '" WHERE username = "' . addslashes($_POST['login']) . '"');
-        if (mysqli_error($dbCon)) {
-             $sysError[] = 'Query failed...';
-        } else {
+
+        $stmt = $pdo->prepare('UPDATE users SET session_id = :session_id WHERE username = :username');
+        $stmt->execute(['session_id' => $sessionId, 'username' => $_POST['login']]);
+
+        if ($stmt->rowCount() > 0) {
             $tpl->assign('LOGIN', 'U bent succesvol ingelogd.');
+        } else {
+            $sysError[] = 'Query failed...';
         }
     }
 }

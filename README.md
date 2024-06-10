@@ -18,6 +18,7 @@ The criminals blauw - revamped group would like to thank the following people fo
 * Programming: Patrick (Vii)
 * Security checks: Koen (k.rens)
 * Begangster design: Frenzo (Frenzo.Brouwer)
+* Refactor to PHP8.2: Jeroen (Jeroen.G)
 
 > Without you guys the project would see a whole other daylight if there would be any daylight at all! Thanks for the work, donations and everything else!
 
@@ -29,6 +30,7 @@ The criminals blauw - revamped group would like to thank the following people fo
 * Using latest programming for password protection
 * Fully intergrated user system
 * All the basics you need to run a online game
+* PHP 8.2 & PDO
 
 ### Setup
 

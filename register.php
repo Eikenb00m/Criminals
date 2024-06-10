@@ -14,69 +14,66 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>. 
  */
 
-// Define website root dir
 require_once('init.php');
 
 $formError = array();
 $error = '';
 
-// Check if user is loggedin, if so no need to be here...
-if (LOGGEDIN == TRUE) { header('Location: ' . ROOT_URL . 'ingame/index.php'); }
+// Check if user is logged in, if so no need to be here...
+if (LOGGEDIN === true) {
+    header('Location: ' . ROOT_URL . 'ingame/index.php');
+    exit();
+}
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    
-    if ($_POST['login'] == null) {
-        $formError[] = 'Gebruikernsama is niet ingevuld.';
-    }
-    elseif ($_POST['login'] != null) {
-        $result = $dbCon->query('SELECT username FROM users WHERE username = "' . addslashes($_POST['login']) . '"');
-        if (mysqli_error($dbCon)) {
-             $sysError[] = 'Query failed...';
-             $formError[] = 'Er is een technische fout ontstaan';
-        } else {
-            if ($result->num_rows > 0) {
-                $formError[] = 'Gebruikersnaam is al in gebruik';
-            }
+
+    if (empty($_POST['login'])) {
+        $formError[] = 'Gebruikersnaam is niet ingevuld.';
+    } else {
+        $stmt = $pdo->prepare('SELECT username FROM users WHERE username = :username');
+        $stmt->execute(['username' => $_POST['login']]);
+        if ($stmt->rowCount() > 0) {
+            $formError[] = 'Gebruikersnaam is al in gebruik';
         }
     }
-    
-    if ($_POST['password'] == null) {
+
+    if (empty($_POST['password'])) {
         $formError[] = 'Wachtwoord is niet ingevuld.';
     }
-    
-    if ($_POST['passconfirm'] == null) {
-        $formError[] = 'Controler wachtwoord is niet ingevuld.';
+
+    if (empty($_POST['passconfirm'])) {
+        $formError[] = 'Controle wachtwoord is niet ingevuld.';
     }
-    
-    if ($_POST['emailCheck'] == null) {
+
+    if (empty($_POST['emailCheck'])) {
         $formError[] = 'Email is niet ingevuld.';
-    }
-    elseif (!filter_var($_POST['emailCheck'], FILTER_VALIDATE_EMAIL)) {
+    } elseif (!filter_var($_POST['emailCheck'], FILTER_VALIDATE_EMAIL)) {
         $formError[] = 'Email adres is niet volledig.';
     }
-    
+
     if (count($formError) > 0) {
-        foreach ($formError as $key => $value) {
+        foreach ($formError as $value) {
             $error .= '- ' . $value . '<br />';
         }
         $tpl->assign($_POST);
         $tpl->assign('form_error', $error);
     } else {
-        
-        // Create safe hash for user password with blowfish algoritem
-        $userSalt = strtr(base64_encode(mcrypt_create_iv(16, MCRYPT_DEV_URANDOM)), '+', '.');
-        $userSalt = sprintf("$2a$%02d$", 10) . $userSalt;
-        
-        $userHash = crypt($_POST['password'], $userSalt);
-        
-        $dbCon->query('INSERT INTO users (username, password, email, type, activated)
-                                   VALUES ("' . addslashes($_POST['login']) . '", "' . $userHash . '",
-                                           "' . addslashes($_POST['emailCheck']) . '", "' . addslashes($_POST['type']) . '",
-                                          1)');
-        if (mysqli_error($dbCon)) {
-            $sysError[] = 'Query failed...';
+        // Create safe hash for user password with bcrypt algorithm
+        $userHash = password_hash($_POST['password'], PASSWORD_BCRYPT);
+
+        $stmt = $pdo->prepare('INSERT INTO users (username, password, email, type, activated) VALUES (:username, :password, :email, :type, :activated)');
+        $stmt->execute([
+            'username' => $_POST['login'],
+            'password' => $userHash,
+            'email' => $_POST['emailCheck'],
+            'type' => $_POST['type'],
+            'activated' => 1
+        ]);
+
+        if ($stmt->rowCount() > 0) {
+            $tpl->assign('REGISTERED', 'U bent succesvol geregistreerd, je kan nu inloggen!');
         } else {
-            $tpl->assign('REGISTERD', 'U bent succesvol geregistreerd, je kan nu inloggen!');
+            $sysError[] = 'Query failed...';
         }
     }
 }

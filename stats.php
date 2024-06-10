@@ -17,47 +17,48 @@
 require_once('init.php');
 
 // Get best players
-$bestPlayers = array();
+try {
+    $bestPlayers = array();
+    $stmt = $pdo->query('SELECT username FROM users ORDER BY attack_power DESC LIMIT 5');
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $bestPlayers[] = $row['username'];
+    }
+    $tpl->assign('bestPlayers', $bestPlayers);
 
-$typeResult = $dbCon->query('SELECT username FROM users ORDER BY attack_power DESC LIMIT 0,5');
-while ($row = $typeResult->fetch_assoc()) {
-    $bestPlayers[] = $row['username'];
+    // Get best clans
+    $bestClans = array();
+    $stmt = $pdo->query('SELECT clan_name FROM clans ORDER BY clan_clicks DESC LIMIT 5');
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $bestClans[] = $row['clan_name'];
+    }
+    $tpl->assign('bestClans', $bestClans);
+
+    // Get newest members
+    $newestMembers = array();
+    $stmt = $pdo->query('SELECT username FROM users WHERE activated = 1 ORDER BY id DESC LIMIT 5');
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $newestMembers[] = $row['username'];
+    }
+    $tpl->assign('newestMembers', $newestMembers);
+
+    // Get most clicks
+    $mostClicks = array();
+    $stmt = $pdo->query('SELECT username FROM users ORDER BY clicks DESC LIMIT 5');
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $mostClicks[] = $row['username'];
+    }
+    $tpl->assign('mostClicks', $mostClicks);
+
+    // Get member count by type
+    $memberCount = array();
+    $stmt = $pdo->query('SELECT COUNT(*) as aantal, type FROM users GROUP BY type');
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $memberCount[$row['type']] = $row['aantal'];
+    }
+    $tpl->assign('memberCount', $memberCount);
+
+} catch (PDOException $e) {
+    $tpl->assign('error', 'Database error: ' . $e->getMessage());
 }
-$tpl->assign('bestPlayers', $bestPlayers);
 
-// Get best clans
-$bestClans = array();
-
-$clanResult = $dbCon->query('SELECT clan_name FROM clans ORDER BY clan_clicks DESC LIMIT 0,5');
-while ($row = $clanResult->fetch_assoc()) {
-    $bestClans[] = $row['clan_name'];
-}
-$tpl->assign('bestClans', $bestClans);
-
-// Get newest members
-$newestMembers = array();
-
-$newestResult = $dbCon->query('SELECT username FROM users WHERE activated = 1 ORDER BY id DESC LIMIT 0,5');
-while ($row = $newestResult->fetch_assoc()) {
-    $newestMembers[] = $row['username'];
-}
-$tpl->assign('newestMembers', $newestMembers);
-
-// Get most clicks
-$mostClicks = array();
-
-$clicksResult = $dbCon->query('SELECT username FROM users ORDER BY clicks DESC LIMIT 0,5');
-while ($row = $clicksResult->fetch_assoc()) {
-    $mostClicks[] = $row['username'];
-}
-$tpl->assign('mostClicks', $mostClicks);
-
-// get member count by type
-$memberCount = array();
-
-$countResult = $dbCon->query('SELECT COUNT(*) as aantal, type FROM users GROUP BY type');
-while ($row = $countResult->fetch_assoc()) {
-    $memberCount[$row['type']] = $row['aantal'];
-}
-$tpl->assign('memberCount', $memberCount);
 $tpl->display('stats.tpl');
