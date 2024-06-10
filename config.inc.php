@@ -15,7 +15,7 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>. 
  */
 
-DEFINE('SQL_HOSTNAME', 'localhost'); // host, most of the time localhost
+DEFINE('SQL_HOSTNAME', ''); // host, most of the time localhost
 DEFINE('SQL_USERNAME', ''); // put username of the database here
 DEFINE('SQL_PASSWORD', ''); // put password of the database here
 DEFINE('SQL_DATABASE', ''); // put the database name here

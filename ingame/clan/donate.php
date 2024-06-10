@@ -15,6 +15,8 @@
  */
 
 require_once('../init.php');
+// Initialiseer de databaseverbinding
+$dbCon = getPDOConnection();
 
 // Check if user is logged in, if not redirect
 if (LOGGEDIN === false) { 

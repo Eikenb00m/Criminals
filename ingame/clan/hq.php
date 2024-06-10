@@ -15,6 +15,8 @@
  */
 
 require_once('../../init.php');
+// Initialiseer de databaseverbinding
+$dbCon = getPDOConnection();
 
 $error = array();
 $form_error = '';
