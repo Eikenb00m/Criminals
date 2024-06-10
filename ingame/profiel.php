@@ -16,43 +16,51 @@
 
 require_once('../init.php');
 
-// Check if user is loggedin, if not no need to be here...
-if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); }
+// Check if user is logged in, if not, redirect to index page
+if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); exit; }
 
-// check if id is given if not show own profile
-if (!isset($_GET['id']) OR empty($_GET['id'])) {
-    $userId = $userData['id'];
-} else {
-    if (is_numeric($_GET['id'])) {
-        // check if user exists if not show own profile
-        $numResults = $dbCon->query('SELECT username FROM users WHERE id = "' . addslashes($_GET['id']) . '" LIMIT 1')->num_rows;
-        if ($numResults < 1) {
-            $userId = 1;
-        } else {
-            // valid id
-            $userId = (int) $_GET['id'];
-        }
+// Check if id is given, if not show own profile
+$userId = $userData['id'];
+if (isset($_GET['id']) && !empty($_GET['id']) && is_numeric($_GET['id'])) {
+    $stmt = $dbCon->prepare('SELECT username FROM users WHERE id = :id LIMIT 1');
+    $stmt->execute(['id' => $_GET['id']]);
+    if ($stmt->rowCount() > 0) {
+        // Valid id
+        $userId = (int) $_GET['id'];
     } else {
-        $userid = 1;
+        // User does not exist, show default profile (user with id 1)
+        $userId = 1;
     }
 }
 
-$userProfile = $dbCon->query('SELECT * FROM users WHERE id = "' . addslashes($userId) . '" LIMIT 1')->fetch_assoc();
-$itemsResult = $dbCon->query('SELECT * FROM user_items LEFT JOIN items ON user_items.item_id = items.item_id WHERE user_id = "' . addslashes($userId) . '"');
+// Fetch user profile
+$stmt = $dbCon->prepare('SELECT * FROM users WHERE id = :id LIMIT 1');
+$stmt->execute(['id' => $userId]);
+$userProfile = $stmt->fetch(PDO::FETCH_ASSOC);
 
-while ($items = $itemsResult->fetch_assoc()) {
-    $itemArray[$items['item_id']]['id'] = $items['item_id'];
-    $itemArray[$items['item_id']]['name'] = $items['item_name'];
-    $itemArray[$items['item_id']]['attack_power'] = $items['item_attack_power'];
-    $itemArray[$items['item_id']]['defence_power'] = $items['item_defence_power'];
-    $itemArray[$items['item_id']]['costs'] = $items['item_costs'];
-    $itemArray[$items['item_id']]['count'] = $items['item_count'];
-    $itemArray[$items['item_id']]['total_attack_power'] = ($items['item_attack_power'] * $items['item_count']);
-    $itemArray[$items['item_id']]['total_defence_power'] = ($items['item_defence_power']  * $items['item_count']);
+// Fetch user items
+$stmt = $dbCon->prepare('SELECT * FROM user_items LEFT JOIN items ON user_items.item_id = items.item_id WHERE user_id = :user_id');
+$stmt->execute(['user_id' => $userId]);
+$items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$itemArray = [];
+foreach ($items as $item) {
+    $itemArray[$item['item_id']] = [
+        'id' => $item['item_id'],
+        'name' => $item['item_name'],
+        'attack_power' => $item['item_attack_power'],
+        'defence_power' => $item['item_defence_power'],
+        'costs' => $item['item_costs'],
+        'count' => $item['item_count'],
+        'total_attack_power' => ($item['item_attack_power'] * $item['item_count']),
+        'total_defence_power' => ($item['item_defence_power'] * $item['item_count']),
+    ];
 }
-if ($itemsResult->num_rows > 1) { 
+
+if (count($items) > 1) {
     $tpl->assign('items', $itemArray);
 }
-        
+
 $tpl->assign('user', $userProfile);
 $tpl->display('ingame/profiel.tpl');
+?>

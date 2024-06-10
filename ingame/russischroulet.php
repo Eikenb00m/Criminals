@@ -16,24 +16,35 @@
 
 require_once('../init.php');
 
-// Check if user is loggedin, if so no need to be here...
-if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); }
+// Check if user is logged in, if not redirect to login page
+if (!LOGGEDIN) {
+    header('Location: ' . ROOT_URL . 'index.php');
+    exit;
+}
+
 $winningMoney = 500;
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-  
-    // Chance variable  
-    $shot = (int) rand(0,1); 
-        
-    // user won
-    if ($shot == 1) {
-        $dbCon->query('UPDATE users SET cash = (cash + ' . $winningMoney . ') WHERE session_id = "' . $userData['session_id'] . '"');
-            
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    // Chance variable
+    $shot = (int) rand(0, 1);
+
+    if ($shot === 1) {
+        // User won
+        $stmt = $dbCon->prepare('UPDATE users SET cash = cash + :winningMoney WHERE session_id = :session_id');
+        $stmt->execute([
+            ':winningMoney' => $winningMoney,
+            ':session_id' => $userData['session_id']
+        ]);
         $tpl->assign('success', 'Je haalt de trekker over en de magnum klikt, je hebt het overleeft en wint ' . $winningMoney . '!');
     } else {
-        //user did not win
-        $dbCon->query('UPDATE users SET cash = (cash - ' . $winningMoney . ') WHERE session_id = "' . $userData['session_id'] . '"');
-        $tpl->assign('form_error','Je haalt de trekker over en voor dat je het weet schiet de kogel dwars door je hoofd! Je hebt  ' . $winningMoney . ' verloren!');
+        // User did not win
+        $stmt = $dbCon->prepare('UPDATE users SET cash = cash - :losingMoney WHERE session_id = :session_id');
+        $stmt->execute([
+            ':losingMoney' => $winningMoney,
+            ':session_id' => $userData['session_id']
+        ]);
+        $tpl->assign('form_error', 'Je haalt de trekker over en voor dat je het weet schiet de kogel dwars door je hoofd! Je hebt ' . $winningMoney . ' verloren!');
     }
 }
 

@@ -16,21 +16,25 @@
 
 require_once('../init.php');
 
-// Check if user is loggedin, if so no need to be here...
-if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); }
+// Check if user is logged in, if not, redirect to index page
+if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); exit; }
 
-// Check if protection is taken of or change in onlinelist has been requested
+// Check if protection is taken off or change in online list has been requested
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (isset($_POST['onlineList'])) {
-        $result = $dbCon->query('UPDATE users SET showonline = "' . ($userData['showonline'] == 1 ? 0 : 1) . '" WHERE id = "' . $userData['id'] . '"');
-        $tpl->assign('success', 'Online status is succesvol gewijzigd!');
+        $newStatus = ($userData['showonline'] == 1 ? 0 : 1);
+        $stmt = $dbCon->prepare('UPDATE users SET showonline = :showonline WHERE id = :id');
+        $stmt->execute(['showonline' => $newStatus, 'id' => $userData['id']]);
         
-        $userData['showonline'] = ($userData['showonline'] == 1 ? 0 : 1);
+        $tpl->assign('success', 'Online status is succesvol gewijzigd!');
+        $userData['showonline'] = $newStatus;
         $tpl->assign('showonline', $userData['showonline']);
     }
     
     if (isset($_POST['guard'])) {
-        $result = $dbCon->query('UPDATE users SET protection = "0" WHERE id = "' . $userData['id'] . '"');
+        $stmt = $dbCon->prepare('UPDATE users SET protection = 0 WHERE id = :id');
+        $stmt->execute(['id' => $userData['id']]);
+        
         $userData['protection'] = 0;
         $tpl->assign('protection', 0);
         $tpl->assign('success', 'Je bescherming is er nu vanaf gehaald, succes!');
@@ -38,24 +42,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 }
 
 // Get current online users from view
-$result = $dbCon->query('SELECT * FROM onlineUsers');
+$stmt = $dbCon->query('SELECT * FROM onlineUsers');
 $onlineUsers = array();
-while ($row = $result->fetch_assoc()) {
+while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
     $onlineUsers[$row['showonline']] = $row['Count'];
 }
 $tpl->assign('onlineusers', $onlineUsers);
 
 // Get click count today
-$result = $dbCon->query('SELECT COUNT(userid) AS Count FROm clicks WHERE userid = "' . $userData['id'] . '"');
-$row = $result->fetch_assoc();
-if($row['Count'] == null) {
-    $row['Count'] = 0;
-}
-
-// Get unread messages
-$message = $dbCon->query('SELECT message_id FROM messages WHERE message_to_id = "' . $userData['id'] . '" AND message_deleted_to = 0 AND message_read = 0')->num_rows;
-$tpl->assign('message_count', $message);
-
+$stmt = $dbCon->prepare('SELECT COUNT(userid) AS Count FROM clicks WHERE userid = :userid');
+$stmt->execute(['userid' => $userData['id']]);
+$row = $stmt->fetch(PDO::FETCH_ASSOC);
+$row['Count'] = $row['Count'] ?? 0;
 $tpl->assign('clicks_today', $row['Count']);
 
+// Get unread messages
+$stmt = $dbCon->prepare('SELECT COUNT(message_id) FROM messages WHERE message_to_id = :message_to_id AND message_deleted_to = 0 AND message_read = 0');
+$stmt->execute(['message_to_id' => $userData['id']]);
+$message = $stmt->fetchColumn();
+$tpl->assign('message_count', $message);
+
 $tpl->display('ingame/index.tpl');
+?>

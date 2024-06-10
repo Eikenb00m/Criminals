@@ -19,15 +19,14 @@ require_once('../init.php');
 $error = array();
 $form_error = '';
 
-// Check if user is loggedin, if not need to be here...
-if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); }
+// Check if user is logged in, if not, redirect to index page
+if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); exit; }
 
-// Check if user is in an clan if not no need to be here...
-if ($userData['clan_id'] == 0) { header('Location: ' . ROOT_URL . 'ingame/clan/index.php'); }
+// Check if user is in a clan, if not, redirect to clan index page
+if ($userData['clan_id'] == 0) { header('Location: ' . ROOT_URL . 'ingame/clan/index.php'); exit; }
 
-// Check if user has clan access to this page, if not no need to be here..
-if ($userData['clan_level'] < 7) { header('Location: ' . ROOT_URL . 'ingame/clan/index.php'); }
-
+// Check if user has clan access to this page, if not, redirect to clan index page
+if ($userData['clan_level'] < 7) { header('Location: ' . ROOT_URL . 'ingame/clan/index.php'); exit; }
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (!isset($_POST['subject']) OR empty($_POST['subject'])) {
@@ -35,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
    
     if (!isset($_POST['message']) OR empty($_POST['message'])) {
-        $error[] = ' Er is geen bericht ingegeven!';
+        $error[] = 'Er is geen bericht ingegeven!';
     }
     
     // Check for errors and show them if there are any
@@ -45,14 +44,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
         $tpl->assign('form_error', $form_error);
     } else {
-        $result = $dbCon->query('SELECT id FROM users WHERE clan_id = "' . $userData['clan_id'] . '"');
-        while ($row = $result->fetch_assoc()) {
-            $dbCon->query('INSERT INTO messages (message_from_id, message_to_id, message_subject, message_message) VALUES
-                           ("' . $userData['id'] . '", "' . $row['id'] . '", 
-                            "' . addslashes($_POST['subject']) . '", "' . addslashes($_POST['message']) . '"');
+        $stmt = $dbCon->prepare('INSERT INTO messages (message_from_id, message_to_id, message_subject, message_message) VALUES (:from_id, :to_id, :subject, :message)');
+        $result = $dbCon->prepare('SELECT id FROM users WHERE clan_id = :clan_id');
+        $result->execute(['clan_id' => $userData['clan_id']]);
+        
+        while ($row = $result->fetch(PDO::FETCH_ASSOC)) {
+            $stmt->execute([
+                'from_id' => $userData['id'],
+                'to_id' => $row['id'],
+                'subject' => $_POST['subject'],
+                'message' => $_POST['message']
+            ]);
         }
         
-        $tpl->assign('success', 'Het bericht is succesvol verstuur naar alle clan leden!');
+        $tpl->assign('success', 'Het bericht is succesvol verstuurd naar alle clanleden!');
     }
 }
 

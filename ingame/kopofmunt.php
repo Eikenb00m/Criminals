@@ -16,8 +16,8 @@
 
 require_once('../init.php');
 
-// Check if user is loggedin, if so no need to be here...
-if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); }
+// Check if user is logged in, if not, redirect to index page
+if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); exit; }
 
 $error = array();
 $form_error = '';
@@ -25,25 +25,22 @@ $form_error = '';
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (!isset($_POST['kom'])) {
         $error[] = 'Je hebt geen kop of munt aangegeven.';
-    }
-    elseif ($_POST['kom'] < 0 OR $_POST['kom'] > 1) {
+    } elseif ($_POST['kom'] < 0 || $_POST['kom'] > 1) {
         $error[] = 'Je hebt geen kop of munt gekozen.';
     }
     
     if (!isset($_POST['gambleMoney'])) {
         $error[] = 'Je hebt geen inzet ingegeven.';
-    }
-    elseif(!ctype_digit($_POST['gambleMoney'])) {
+    } elseif (!ctype_digit($_POST['gambleMoney'])) {
         $error[] = 'Je inzet is niet numeriek.';
-    }
-    elseif ($_POST['gambleMoney'] == '0') {
-         $error[] = 'Je hebt geen inzet aangegeven.';
-    }
-    elseif ($_POST['gambleMoney'] != '250' AND $_POST['gambleMoney'] != '500' AND $_POST['gambleMoney'] != '1000') {
+    } elseif ($_POST['gambleMoney'] == '0') {
+        $error[] = 'Je hebt geen inzet aangegeven.';
+    } elseif ($_POST['gambleMoney'] != '250' && $_POST['gambleMoney'] != '500' && $_POST['gambleMoney'] != '1000') {
         $error[] = 'Je hebt de inzet gemanipuleerd.';
     } else {
-        $result = $dbCon->query('SELECT cash FROM users WHERE session_id = "' . $userData['session_id'] . '"');
-        $row = $result->fetch_assoc();
+        $stmt = $dbCon->prepare('SELECT cash FROM users WHERE session_id = :session_id');
+        $stmt->execute(['session_id' => $userData['session_id']]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if ($row['cash'] < $_POST['gambleMoney']) {
             $error[] = 'Je inzet is hoger dan dat je nu in cash hebt.';
@@ -56,30 +53,34 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
         $tpl->assign('form_error', $form_error);
     } else {
-        // We got a kom, now check if he won something...
+        // We got a kom, now check if the user won something...
         $kom = (int) $_POST['kom'];
         $gambleMoney = (int) $_POST['gambleMoney'];
-        $wonNumber = (int) rand(1,6);
+        $wonNumber = rand(1, 6);
         
-        // user won
-        if (($wonNumber == 1 OR $wonNumber == 3 OR $wonNumber == 5) AND $kom == 0) {
-            $moneyWon = (int) ($gambleMoney * 1.5);
-            $dbCon->query('UPDATE users SET cash = (cash + ' . $moneyWon . ') WHERE session_id = "' . $userData['session_id'] . '"');
+        // User won
+        if (($wonNumber == 1 || $wonNumber == 3 || $wonNumber == 5) && $kom == 0) {
+            $moneyWon = $gambleMoney * 1.5;
+            $stmt = $dbCon->prepare('UPDATE users SET cash = cash + :money WHERE session_id = :session_id');
+            $stmt->execute(['money' => $moneyWon, 'session_id' => $userData['session_id']]);
             
             $tpl->assign('success', 'Je hebt kop aangegeven en dat was nog goed ook! Je wint ' . $moneyWon . '!');
         
-        // user won again :-)
-        } elseif (($wonNumber == 2 OR $wonNumber == 4 OR $wonNumber == 6) AND $kom == 1) {
-            $moneyWon = (int) ($gambleMoney * 1.5);
-            $dbCon->query('UPDATE users SET cash = (cash + ' . $moneyWon . ') WHERE session_id = "' . $userData['session_id'] . '"');
+        // User won again :-)
+        } elseif (($wonNumber == 2 || $wonNumber == 4 || $wonNumber == 6) && $kom == 1) {
+            $moneyWon = $gambleMoney * 1.5;
+            $stmt = $dbCon->prepare('UPDATE users SET cash = cash + :money WHERE session_id = :session_id');
+            $stmt->execute(['money' => $moneyWon, 'session_id' => $userData['session_id']]);
             
             $tpl->assign('success', 'Je hebt munt aangegeven en dat was nog goed ook! Je wint ' . $moneyWon . '!');
         } else {
-            //user lost
-            $dbCon->query('UPDATE users SET cash = (cash - ' . $gambleMoney . ') WHERE session_id = "' . $userData['session_id'] . '"');
+            // User lost
+            $stmt = $dbCon->prepare('UPDATE users SET cash = cash - :money WHERE session_id = :session_id');
+            $stmt->execute(['money' => $gambleMoney, 'session_id' => $userData['session_id']]);
             $tpl->assign('form_error', 'Awhhh.... je had het niet goed! Je verliest ' . $gambleMoney . '!');
         }
     }
 }
 
 $tpl->display('ingame/kopofmunt.tpl');
+?>

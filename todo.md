@@ -15,19 +15,19 @@
 --clan
 ---bank.php - Done
 ---donate.php - Done
----hq.php
----index.php
----message.php
----shop.php
---attack.php
---bank.php
---bankroven.php
---doneren.php
---editProfiel.php
---getallenspel.php
---hogerlager.php
---index.php
---kopofmunt.php
+---hq.php - Done
+---index.php - Done
+---message.php - Done
+---shop.php - Done
+--attack.php - Done
+--bank.php - Done
+--bankroven.php - Done
+--doneren.php - Done
+--editProfiel.php - Done
+--getallenspel.php - Done
+--hogerlager.php - Done
+--index.php - Done
+--kopofmunt.php - Done
 --list.php
 --message.php
 --paardenrace.php
@@ -52,7 +52,7 @@
 -prijzen.php - Done
 -register.php - Done
 -rules.php - Done
-stats.php - Done
+-stats.php - Done
 
 # Prompt: 
 Ik heb een txt-based mafia game gedownload, deze moet refacterd worden naar de huidige php versie en de huidige pdo versie kun jij mij daar script voor script mee helpen?

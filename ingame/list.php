@@ -16,59 +16,54 @@
 
 require_once('../init.php');
 
-// Check if user is loggedin, if not no need to be here...
-if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); }
+// Check if user is logged in, if not, redirect to index page
+if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); exit; }
 $listArray = array();
 
-// user online list check
- if (isset($_POST['onlineList'])) {
-    $result = $dbCon->query('UPDATE users SET showonline = "' . ($userData['showonline'] == 1 ? 0 : 1) . '" WHERE id = "' . $userData['id'] . '"');
+// User online list check
+if (isset($_POST['onlineList'])) {
+    $newStatus = ($userData['showonline'] == 1 ? 0 : 1);
+    $stmt = $dbCon->prepare('UPDATE users SET showonline = :showonline WHERE id = :id');
+    $stmt->execute(['showonline' => $newStatus, 'id' => $userData['id']]);
     $tpl->assign('success', 'Online status is succesvol gewijzigd!');
         
-    $userData['showonline'] = ($userData['showonline'] == 1 ? 0 : 1);
+    $userData['showonline'] = $newStatus;
     $tpl->assign('showonline', $userData['showonline']);
 }
 
-
-// Check if user wants a diffirent sorting
-if (!isset($_GET['order']) OR empty($_GET['order'])) {
-    $orderBy = 'username';
-} else {
-    if ($_GET['order'] != 'username' OR $_GET['order'] != 'attack_power' OR $_GET['order'] != 'type' OR $_GET['order'] != 'cash' OR $_GET['order'] != 'bank') {
-        $orderBy = 'username';
-    } else {
+// Check if user wants a different sorting
+$orderBy = 'username';
+if (isset($_GET['order']) && !empty($_GET['order'])) {
+    $validColumns = ['username', 'attack_power', 'type', 'cash', 'bank'];
+    if (in_array($_GET['order'], $validColumns)) {
         $orderBy = $_GET['order'];
     }
 }
 
-// check if pagination is active
-if (!isset($_GET['start']) OR empty($_GET['start'])) {
-    $start = 0;
-} else {
-    if (!is_numeric($_GET['start'])) {
-        $start = 0;
-    } else {
-        $start = $_GET['start'];
-    }
+// Check if pagination is active
+$start = 0;
+if (isset($_GET['start']) && is_numeric($_GET['start'])) {
+    $start = (int) $_GET['start'];
 }
-$listResult = $dbCon->query('SELECT id, username, attack_power, type, cash, bank, clicks FROM users WHERE activated = 1 AND showonline = 1 ORDER BY "' . addslashes($orderBy) . '" LIMIT ' . addslashes($start) . ',50');
-while ($row = $listResult->fetch_assoc()) {
-    $listArray[$row['id']]['id'] = $row['id'];
-    $listArray[$row['id']]['username'] = $row['username'];
-    $listArray[$row['id']]['type'] = $type[$row['type']]['name'];
-    $listArray[$row['id']]['type_id'] = $row['type'];
-    $listArray[$row['id']]['cash'] = $row['cash'];
-    $listArray[$row['id']]['bank'] = $row['bank'];
-    $listArray[$row['id']]['attack_power'] = ($row['attack_power'] + ($row['clicks'] * 5));
+
+$stmt = $dbCon->prepare('SELECT id, username, attack_power, type, cash, bank, clicks FROM users WHERE activated = 1 AND showonline = 1 ORDER BY ' . $orderBy . ' LIMIT :start, 50');
+$stmt->bindParam(':start', $start, PDO::PARAM_INT);
+$stmt->execute();
+while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $listArray[$row['id']] = [
+        'id' => $row['id'],
+        'username' => $row['username'],
+        'type' => $type[$row['type']]['name'],
+        'type_id' => $row['type'],
+        'cash' => $row['cash'],
+        'bank' => $row['bank'],
+        'attack_power' => ($row['attack_power'] + ($row['clicks'] * 5))
+    ];
 }
 $tpl->assign('list', $listArray);
 
 // Activate pagination
-if (($start / 50) != 0) {
-    $start = 0;
-}
-
-$pageResult = $dbCon->query('SELECT id FROM users')->num_rows;
+$pageResult = $dbCon->query('SELECT COUNT(id) FROM users')->fetchColumn();
 $pageCount = ceil($pageResult / 50);
 
 // Get current active page
@@ -78,12 +73,13 @@ while ($p <= $pageCount) {
     if ($pC == $start) {
         break;
     }
-    $pC = ($pC + 50);
+    $pC += 50;
     $p++;
 }
-$pagination = array();
-$pagination['cPage'] = $p;
-$pagination['tPage'] = $pageCount; 
+$pagination = [
+    'cPage' => $p,
+    'tPage' => $pageCount
+];
 
 for ($i = 1; $i <= $pageCount; $i++) {
     $pagination['pageBegin'][$i] = (($i - 1) * 50);
@@ -92,8 +88,8 @@ $tpl->assign('pagination', $pagination);
 
 // Get current online users from view
 $result = $dbCon->query('SELECT * FROM onlineUsers');
-$onlineUsers = array();
-while ($row = $result->fetch_assoc()) {
+$onlineUsers = [];
+while ($row = $result->fetch(PDO::FETCH_ASSOC)) {
     $onlineUsers[$row['showonline']] = $row['Count'];
 }
 $tpl->assign('onlineusers', $onlineUsers);
@@ -101,3 +97,4 @@ $tpl->assign('onlineusers', $onlineUsers);
 // Output page
 $tpl->assign('order', $orderBy);
 $tpl->display('ingame/list.tpl');
+?>

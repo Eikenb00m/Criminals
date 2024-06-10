@@ -16,8 +16,8 @@
 
 require_once('../init.php');
 
-// Check if user is loggedin, if so no need to be here...
-if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); }
+// Check if user is logged in, if not, redirect to index page
+if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); exit; }
 
 $error = array();
 $form_error = '';
@@ -25,14 +25,14 @@ $form_error = '';
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (!isset($_POST['donate'])) {
         $error[] = 'Je hebt niemand ingevuld waarna je wilt doneren.';
-    }
-    else {
-        $result = $dbCon->query('SELECT username, protection FROM users WHERE username = "' . addslashes($_POST['donate']) . '" LIMIT 1');
-        $donateUser = $result->fetch_assoc();
-        if ($result->num_rows < 1) {
+    } else {
+        $stmt = $dbCon->prepare('SELECT username, protection FROM users WHERE username = :username LIMIT 1');
+        $stmt->execute(['username' => $_POST['donate']]);
+        $donateUser = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($stmt->rowCount() < 1) {
             $error[] = 'De speler naar wie je wilt doneren bestaat niet!';
-        }
-        elseif ($donateUser['protection'] == 1) {
+        } elseif ($donateUser['protection'] == 1) {
             $error[] = 'De speler naar wie je wilt doneren staat nog onder bescherming!';
         }
     }
@@ -41,18 +41,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $error[] = 'Je kan niet doneren, je staat zelf nog onder protectie';
     }
     
-    if ($userData['username'] == $donateUser['username']) {
+    if (isset($donateUser) && $userData['username'] == $donateUser['username']) {
         $error[] = 'Je kan niet naar jezelf doneren!';
     }
     
     if (!isset($_POST['money'])) {
         $error[] = 'Je hebt geen donatie bedrag ingegeven.';
-    }
-    elseif(!ctype_digit($_POST['money'])) {
-        $error[] = 'Je donatie bedrag is niet numeriek..';
+    } elseif (!ctype_digit($_POST['money'])) {
+        $error[] = 'Je donatie bedrag is niet numeriek.';
     } else {
-        $result = $dbCon->query('SELECT cash FROM users WHERE session_id = "' . $userData['session_id'] . '"');
-        $row = $result->fetch_assoc();
+        $stmt = $dbCon->prepare('SELECT cash FROM users WHERE session_id = :session_id');
+        $stmt->execute(['session_id' => $userData['session_id']]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if ($row['cash'] < $_POST['money']) {
             $error[] = 'Je donatie bedrag is hoger dan je nu in cash hebt.';
@@ -65,18 +65,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
         $tpl->assign('form_error', $form_error);
     } else {
-        // Well the user can donate, and the user who's get donated also exists... just do the donate...
+        // The user can donate, and the user who's getting donated also exists... just do the donate...
         $DonateMoney = (int) $_POST['money'];
         
-        $dbCon->query('UPDATE users SET cash = (cash - ' . $DonateMoney . ') WHERE session_id = "' . $userData['session_id'] . '"');
-        $dbCon->query('UPDATE users SET cash = (cash + ' . $DonateMoney . ') WHERE username = "' . $donateUser['username'] . '"');
+        $stmt = $dbCon->prepare('UPDATE users SET cash = cash - :money WHERE session_id = :session_id');
+        $stmt->execute(['money' => $DonateMoney, 'session_id' => $userData['session_id']]);
+        
+        $stmt = $dbCon->prepare('UPDATE users SET cash = cash + :money WHERE username = :username');
+        $stmt->execute(['money' => $DonateMoney, 'username' => $donateUser['username']]);
 
         $tpl->assign('success', 'Je hebt je donatie verstuurd!');
     }
 }
 
-//check if username is already filled
+// Check if username is already filled
 if (isset($_GET['donateTo'])) {
     $tpl->assign('donateUser', $_GET['donateTo']);
 }
+
 $tpl->display('ingame/doneren.tpl');

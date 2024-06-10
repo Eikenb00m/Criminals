@@ -16,17 +16,17 @@
 
 require_once('../init.php');
 
-// Check if user is loggedin, if so no need to be here...
-if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); }
+// Check if user is logged in, if not, redirect to index page
+if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); exit; }
 
 $hlNumber = '';
 
-// how much you can win
-$winMoney = ($userData['hlround'] * (2.6 * 500));
+// How much you can win
+$winMoney = $userData['hlround'] * (2.6 * 500);
 $tpl->assign('winMoney', $winMoney);
 
-// how much it costs
-$costMoney = ($userData['hlround'] * (2.5 * 500));
+// How much it costs
+$costMoney = $userData['hlround'] * (2.5 * 500);
 $tpl->assign('costMoney', $costMoney);
 
 $error = array();
@@ -36,7 +36,7 @@ if (isset($_GET['number'])) {
     $hlNumber = (int) $_GET['number'];
 } else {
     if ($_SERVER['REQUEST_METHOD'] == "POST") { }
-    else { $hlNumber = rand(1,100); }
+    else { $hlNumber = rand(1, 100); }
 }
 
 // To get the answer to the user
@@ -44,12 +44,12 @@ if (isset($_GET['result'])) {
     if ($_GET['result'] == 'won') {
         $tpl->assign('success', 'Je hebt correct gekozen! Je bent door naar de volgende ronde!');
     } else {
-        $tpl->assign('form_error', 'Helaas je hebt niet gewonnen! volgende keer beter?');
+        $tpl->assign('form_error', 'Helaas je hebt niet gewonnen! Volgende keer beter?');
     }
 }
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    if (!isset($_POST['hl']) OR empty($_POST['hl'])) {
+    if (!isset($_POST['hl']) || empty($_POST['hl'])) {
         $error[] = 'Geen hoger of lager antwoord gevonden';
     }
     
@@ -68,32 +68,48 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $tpl->assign('form_error', $form_error);
     } else {
         // We got higher or lower! :-)
-        $hluserAnswer = addslashes($_POST['hl']);
-        $hlNumerWin = rand(1,100);
+        $hluserAnswer = $_POST['hl'];
+        $hlNumerWin = rand(1, 100);
       
         if ($hlNumber > $hlNumerWin) {
             $hlcompAnswer = 1;
-        }
-        elseif ($hlNumber < $hlNumerWin) {
+        } elseif ($hlNumber < $hlNumerWin) {
             $hlcompAnswer = 2;
-        }
-        else {
+        } else {
             $hlcompAnswer = $hluserAnswer;
         }
         
-        // User won
-        if ($hluserAnswer == $hlcompAnswer) {
-            $dbCon->query('UPDATE users SET cash = (cash - "' . $costMoney . '") WHERE id = "' . $userData['id'] . '"');
-            $dbCon->query('UPDATE users SET cash = (cash + "' . $winMoney . '"), hlround = (hlround + 1) WHERE id = "' . $userData['id'] . '"');
-            header('Location: ' . ROOT_URL . 'ingame/hogerlager.php?result=won');
-        }
-        // User lost
-        else {
-            $dbCon->query('UPDATE users SET cash = (cash - "' . $costMoney . '") WHERE id = "' . $userData['id'] . '"');
-            header('Location: ' . ROOT_URL . 'ingame/hogerlager.php?result=lost');
+        $dbCon->beginTransaction();
+        
+        try {
+            // User won
+            if ($hluserAnswer == $hlcompAnswer) {
+                $stmt = $dbCon->prepare('UPDATE users SET cash = cash - :costMoney WHERE id = :id');
+                $stmt->execute(['costMoney' => $costMoney, 'id' => $userData['id']]);
+                
+                $stmt = $dbCon->prepare('UPDATE users SET cash = cash + :winMoney, hlround = hlround + 1 WHERE id = :id');
+                $stmt->execute(['winMoney' => $winMoney, 'id' => $userData['id']]);
+                
+                $dbCon->commit();
+                header('Location: ' . ROOT_URL . 'ingame/hogerlager.php?result=won');
+                exit;
+            }
+            // User lost
+            else {
+                $stmt = $dbCon->prepare('UPDATE users SET cash = cash - :costMoney WHERE id = :id');
+                $stmt->execute(['costMoney' => $costMoney, 'id' => $userData['id']]);
+                
+                $dbCon->commit();
+                header('Location: ' . ROOT_URL . 'ingame/hogerlager.php?result=lost');
+                exit;
+            }
+        } catch (Exception $e) {
+            $dbCon->rollBack();
+            $tpl->assign('form_error', 'Er ging iets mis. Probeer het opnieuw.');
         }
     }
 }
 
 $tpl->assign('hlNumber', $hlNumber);
 $tpl->display('ingame/hogerlager.tpl');
+?>

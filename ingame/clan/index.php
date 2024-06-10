@@ -16,37 +16,39 @@
 
 require_once('../../init.php');
 
-// Check if user is loggedin, if so no need to be here...
-if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); }
+// Check if user is logged in, if not, redirect to index page
+if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); exit; }
 
 $showPage = 'index';
 $error = array();
 $form_error = '';
 
-// Check if specific page is called if not show default
-if (isset($_GET['page']) AND !empty($_GET['page'])) {
+// Check if specific page is called, if not, show default
+if (isset($_GET['page']) && !empty($_GET['page'])) {
     
-    // clan member wants to delete the clan
+    // Clan member wants to delete the clan
     if ($_GET['page'] == 'delete') {
         
-        // check if user is clan owner
+        // Check if user is clan owner
         if ($userData['clan_level'] < 10) {
             $tpl->assign('error', 'Je hebt geen autorisatie voor deze pagia.');
         } else {
             $showPage = 'delete';
             
-            // check if confirmation is asked
+            // Check if confirmation is asked
             if (isset($_GET['confirmation'])) {
                 
-                // remove clan id from all users
-                $dbCon->query('UPDATE users SET clan_id = 0, clan_level = 0 WHERE clan_id = "' . $userData['clan_id'] . '"');
-            
+                // Remove clan id from all users
+                $stmt = $dbCon->prepare('UPDATE users SET clan_id = 0, clan_level = 0 WHERE clan_id = :clan_id');
+                $stmt->execute(['clan_id' => $userData['clan_id']]);
+                
                 // Delete the clan itself
-                $dbCon->query('DELETE FROM clans WHERE clan_id = "' . $userData['id'] . '"');
+                $stmt = $dbCon->prepare('DELETE FROM clans WHERE clan_id = :clan_id');
+                $stmt->execute(['clan_id' => $userData['id']]);
                 
                 $tpl->assign('succes', 'De clan is succesvol verwijderd.');
             } else {
-                // Show html page with confirmation option
+                // Show HTML page with confirmation option
                 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $tpl->assign('confirmation', true);
                 }
@@ -57,33 +59,33 @@ if (isset($_GET['page']) AND !empty($_GET['page'])) {
     // User wants to create a clan
     elseif ($_GET['page'] == 'create') {
         
-        // check if user is already in a clan
+        // Check if user is already in a clan
         if ($userData['clan_level'] > 0) {
             $tpl->assign('error', 'Je hebt al een clan of je zit in een clan, je kan niet nog een clan aanmaken!');
         } else {
             $showPage = 'create';
 
-            // validate creation of clan
+            // Validate creation of clan
             if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
-                // check if name is filled
+                // Check if name is filled
                 if (!isset($_POST['name']) OR empty($_POST['name'])) {
                     $error[] = 'Geen clan naam ingevuld';
                 }
 
-                // check if name is valid
+                // Check if name is valid
                 elseif (!preg_match('/^[A-Za-z0-9_\- ]+$/', $_POST['name'])) {
                     $error[] = 'Clan naam mag alleen letters, spaties en _- tekens bevatten!';
                 } else {
-
-                    // check if clan name already exist
-                    $result = $dbCon->query('SELECT clan_name FROM clans WHERE clan_name = "' . addslashes($_POST['name']) . '"');
-                    if ($result->num_rows > 0) {
+                    // Check if clan name already exists
+                    $stmt = $dbCon->prepare('SELECT clan_name FROM clans WHERE clan_name = :clan_name');
+                    $stmt->execute(['clan_name' => $_POST['name']]);
+                    if ($stmt->rowCount() > 0) {
                         $error[] = 'Clan naam bestaat al!';
                     }
                 }
 
-                // check for errors if found, put them into error array
+                // Check for errors
                 if (count($error) > 0) {
                     foreach ($error as $item) {
                         $form_error .= '- ' . $item . '<br />';
@@ -92,12 +94,21 @@ if (isset($_GET['page']) AND !empty($_GET['page'])) {
                     $tpl->assign('clan_name', $_POST['name']);
                     $tpl->assign('form_error', $form_error);
                 } else {
+                    // Finally we can create the clan itself
+                    $stmt = $dbCon->prepare('INSERT INTO clans (clan_name, clan_owner_id, clan_type) VALUES (:clan_name, :clan_owner_id, :clan_type)');
+                    $stmt->execute([
+                        'clan_name' => $_POST['name'],
+                        'clan_owner_id' => $userData['id'],
+                        'clan_type' => $userData['type']
+                    ]);
 
-                    // finnaly we can create the clan itself...
-                    $dbCon->query('INSERT INTO clans (clan_name, clan_owner_id, clan_type) VALUES (
-                                                      "' . addslashes($_POST['name']) . '", "' . $userData['id'] . '", "' . $userData['type'] . '")');
-
-                    $dbCon->query('UPDATE users SET clan_id = "' . $dbCon->insert_id . '", clan_level = 10 WHERE id = "' . $userData['id'] . '"');
+                    $clan_id = $dbCon->lastInsertId();
+                    $stmt = $dbCon->prepare('UPDATE users SET clan_id = :clan_id, clan_level = 10 WHERE id = :user_id');
+                    $stmt->execute([
+                        'clan_id' => $clan_id,
+                        'user_id' => $userData['id']
+                    ]);
+                    
                     $tpl->assign('success', 'De clan is aangemaakt!');
                 }
             }
@@ -107,24 +118,25 @@ if (isset($_GET['page']) AND !empty($_GET['page'])) {
     // User wants to leave a clan
     elseif ($_GET['page'] == 'leave') {
         
-        // check if user is in a clan
+        // Check if user is in a clan
         if ($userData['clan_level'] < 1) {
             $tpl->assign('error', 'Je zit momenteel niet in een clan, dan kan je deze ook niet verlaten.');
         } else {
             $showPage = 'leave';
             
-              // check if confirmation is asked
+            // Check if confirmation is asked
             if (isset($_GET['confirmation'])) {
                 
-                // remove user form clan
+                // Remove user from clan
                 if ($userData['clan_level'] == 10) {
                     $error[] = 'Je kan niet uit de clan stappen als je de owner bent!';
                 } else {
-                    $dbCon->query('UPDATE users SET clan_id = 0, clan_level = 0 WHERE id = "' . $userData['id'] . '"');
+                    $stmt = $dbCon->prepare('UPDATE users SET clan_id = 0, clan_level = 0 WHERE id = :id');
+                    $stmt->execute(['id' => $userData['id']]);
                     $tpl->assign('success', 'Je bent succesvol uit de clan gestapt!');
                 }
             } else {
-                // Show html page with confirmation option
+                // Show HTML page with confirmation option
                 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $tpl->assign('confirmation', true);
                 }
@@ -136,83 +148,82 @@ if (isset($_GET['page']) AND !empty($_GET['page'])) {
     elseif ($_GET['page'] == 'join') {
         $showPage = 'join';
         
-        //check if user is in a clan
+        // Check if user is in a clan
         if ($userData['clan_level'] > 0) {
             $tpl->assign('error', 'Je zit momenteel al in een clan, dan kan je een nieuwe clan niet joinen!');
         } else {
-            
-            // validate enterd clan name
+            // Validate entered clan name
             if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 
-                // check if name is enterd
+                // Check if name is entered
                 if (!isset($_POST['name']) OR empty($_POST['name'])) {
                     $error[] = 'Je hebt geen clan naam opgegeven!';
                 } else {
-                    
-                    // check if clan exists
-                    $result = $dbCon->query('SELECT clan_name, clan_type, clan_id FROM clans WHERE clan_name = "' . addslashes($_POST['name']) . '" LIMIT 1');
-                    if ($result->num_rows < 1) {
+                    // Check if clan exists
+                    $stmt = $dbCon->prepare('SELECT clan_name, clan_type, clan_id FROM clans WHERE clan_name = :clan_name LIMIT 1');
+                    $stmt->execute(['clan_name' => $_POST['name']]);
+                    if ($stmt->rowCount() < 1) {
                         $error[] = 'De clan naam opgegeven kan niet worden gevonden!';
                     } else {
-                        
-                        // check if the user is of the same type as the clan
-                        $row = $result->fetch_assoc();
+                        // Check if the user is of the same type as the clan
+                        $row = $stmt->fetch(PDO::FETCH_ASSOC);
                         if ($userData['type'] != $row['clan_type']) {
                             $error[] = 'De clan heeft een andere type dan dat jij bent, je kan deze clan niet joinen!';
                         }
                     }
                 }
                 
-                 // check for errors if found, put them into error array
+                // Check for errors
                 if (count($error) < 1) {
-                    // and we can let the user apply for the clan
-                    $dbCon->query('INSERT INTO temp (userid, area, variable) VALUES ("' . $userData['id'] .'", "clan_join", "' . $row['clan_id'] . '")');
+                    // Let the user apply for the clan
+                    $stmt = $dbCon->prepare('INSERT INTO temp (userid, area, variable) VALUES (:userid, "clan_join", :clan_id)');
+                    $stmt->execute([
+                        'userid' => $userData['id'],
+                        'clan_id' => $row['clan_id']
+                    ]);
                     $tpl->assign('success', 'Je bent succesvol aangemeld voor de clan ' . $row['clan_name'] . '! De mensen die er over gaan zullen je aanvraag zo spoedig mogelijk bekijken!');
                 }
             }
         }
     }
     
-    // We are going to show them the overview of the clans!
+    // Show overview of the clans
     elseif ($_GET['page'] == 'overview') {
         $clanArray = array();
         
         $showPage = 'overview';
-        $clanResult = $dbCon->query('SELECT * FROM clans ORDER BY clan_name');
-        while ($clanRow = $clanResult->fetch_assoc()) {
+        $stmt = $dbCon->query('SELECT * FROM clans ORDER BY clan_name');
+        while ($clanRow = $stmt->fetch(PDO::FETCH_ASSOC)) {
             
             $clanArray[$clanRow['clan_id']]['clan_id'] = $clanRow['clan_id'];
             $clanArray[$clanRow['clan_id']]['clan_name'] = $clanRow['clan_name'];
-            $clanArray[$clanRow['clan_id']]['clan_member_count'] = $clanResult->num_rows;
             
-            // Retrieve total power of clan with seperated clan members
-            $memberResult = $dbCon->query('SELECT attack_power, defence_power, clicks, clan_level, username, id FROM users WHERE clan_id = "' . $clanRow['clan_id'] . '"');
-            while ($memberRow = $memberResult->fetch_assoc()) {
-                
-                 if (empty($clanArray[$clanRow['clan_id']]['clan_power'])) {
-                    $clanArray[$clanRow['clan_id']]['clan_power'] = ($memberRow['attack_power'] + ($memberRow['clicks'] * 5));
-                    $clanArray[$clanRow['clan_id']]['clan_members'] = 1;
-                 } else {
-                    $clanArray[$clanRow['clan_id']]['clan_power'] += ($memberRow['attack_power'] + ($memberRow['clicks'] * 5));
-                    $clanArray[$clanRow['clan_id']]['clan_members']++;
-                 }
+            // Retrieve total power of clan with separated clan members
+            $stmtMembers = $dbCon->prepare('SELECT attack_power, defence_power, clicks, clan_level, username, id FROM users WHERE clan_id = :clan_id');
+            $stmtMembers->execute(['clan_id' => $clanRow['clan_id']]);
+            
+            $clanArray[$clanRow['clan_id']]['clan_power'] = 0;
+            $clanArray[$clanRow['clan_id']]['clan_members'] = 0;
+            
+            while ($memberRow = $stmtMembers->fetch(PDO::FETCH_ASSOC)) {
+                $clanArray[$clanRow['clan_id']]['clan_power'] += ($memberRow['attack_power'] + ($memberRow['clicks'] * 5));
+                $clanArray[$clanRow['clan_id']]['clan_members']++;
                  
-                 if ($memberRow['clan_level'] == 10) {
-
+                if ($memberRow['clan_level'] == 10) {
                     $clanArray[$clanRow['clan_id']]['clan_owner'] = $memberRow['username'];
                     $clanArray[$clanRow['clan_id']]['clan_owner_id'] = $memberRow['id'];
-                 }
+                }
             }
         }
         $tpl->assign('clanArray', $clanArray);
-        
-    }
-    else {
-        // no matching page found
+    } else {
+        // No matching page found
         header('Location: index.php?page=overview');
+        exit;
     }
 } else {
     header('Location: index.php?page=overview');
+    exit;
 }
 
 if (count($error) > 0) {
@@ -221,4 +232,6 @@ if (count($error) > 0) {
     }
     $tpl->assign('form_error', $form_error);
 }
+
 $tpl->display('clan/' . $showPage . '.tpl');
+?>

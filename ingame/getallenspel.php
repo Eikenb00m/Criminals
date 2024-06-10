@@ -16,8 +16,8 @@
 
 require_once('../init.php');
 
-// Check if user is loggedin, if so no need to be here...
-if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); }
+// Check if user is logged in, if not, redirect to index page
+if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); exit; }
 
 $error = array();
 $form_error = '';
@@ -25,19 +25,18 @@ $form_error = '';
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (!isset($_POST['number'])) {
         $error[] = 'Nummer niet gevonden.';
-    }
-    elseif ($_POST['number'] < 0 OR $_POST['number'] > 10) {
+    } elseif ($_POST['number'] < 0 || $_POST['number'] > 10) {
         $error[] = 'Nummer wat is ingegeven kan niet.';
     }
     
     if (!isset($_POST['gambleMoney'])) {
         $error[] = 'Je hebt geen inzet ingegeven.';
-    }
-    elseif(!ctype_digit($_POST['gambleMoney'])) {
-        $error[] = 'Je inzet is niet numeriek..';
+    } elseif (!ctype_digit($_POST['gambleMoney'])) {
+        $error[] = 'Je inzet is niet numeriek.';
     } else {
-        $result = $dbCon->query('SELECT cash FROM users WHERE session_id = "' . $userData['session_id'] . '"');
-        $row = $result->fetch_assoc();
+        $stmt = $dbCon->prepare('SELECT cash FROM users WHERE session_id = :session_id');
+        $stmt->execute(['session_id' => $userData['session_id']]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if ($row['cash'] < $_POST['gambleMoney']) {
             $error[] = 'Je inzet is hoger dan je nu in cash hebt.';
@@ -50,23 +49,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
         $tpl->assign('form_error', $form_error);
     } else {
-        // We got a number, now check if he won something...
+        // We got a number, now check if the user won something...
         $number = (int) $_POST['number'];
         $gambleMoney = (int) $_POST['gambleMoney'];
-        $wonNumber = (int) rand(0,10);
+        $wonNumber = rand(0, 10);
         
-        // user won
         if ($number == $wonNumber) {
-            $moneyWon = (int) ($gambleMoney * 8);
-            $dbCon->query('UPDATE users SET cash = (cash + ' . $moneyWon . ') WHERE session_id = "' . $userData['session_id'] . '"');
+            $moneyWon = $gambleMoney * 8;
+            $stmt = $dbCon->prepare('UPDATE users SET cash = cash + :money WHERE session_id = :session_id');
+            $stmt->execute(['money' => $moneyWon, 'session_id' => $userData['session_id']]);
             
-            $tpl->assign('success', 'Je hebt het juist getal geraden! Je wint ' . $moneyWon . '!');
+            $tpl->assign('success', 'Je hebt het juiste getal geraden! Je wint ' . $moneyWon . '!');
         } else {
-            //user did not win
-            $dbCon->query('UPDATE users SET cash = (cash - ' . $gambleMoney . ') WHERE session_id = "' . $userData['session_id'] . '"');
+            $stmt = $dbCon->prepare('UPDATE users SET cash = cash - :money WHERE session_id = :session_id');
+            $stmt->execute(['money' => $gambleMoney, 'session_id' => $userData['session_id']]);
             $tpl->assign('form_error', 'Helaas... je hebt het juiste getal niet geraden... Je hebt ' . $gambleMoney . ' verloren!');
         }
     }
 }
 
 $tpl->display('ingame/getallenspel.tpl');
+?>

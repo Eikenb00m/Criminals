@@ -16,79 +16,94 @@
 
 require_once('../init.php');
 
-// Check if user is loggedin, if so no need to be here...
-if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); }
+// Check if user is logged in, if not, redirect to index page
+if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); exit; }
 
-if (isset($_GET['player']) OR isset($_GET['id'])) {
+if (isset($_GET['player']) || isset($_GET['id'])) {
     
     if (isset($_GET['player'])) {
-        $result = $dbCon->query('SELECT * FROM users WHERE username = "' . addslashes($_GET['player']) . '" LIMIT 1');
+        $stmt = $dbCon->prepare('SELECT * FROM users WHERE username = :username LIMIT 1');
+        $stmt->execute(['username' => $_GET['player']]);
     } else {
-        $result = $dbCon->query('SELECT * FROM users WHERE id = "' . addslashes($_GET['id']) . '" LIMIT 1');
+        $stmt = $dbCon->prepare('SELECT * FROM users WHERE id = :id LIMIT 1');
+        $stmt->execute(['id' => $_GET['id']]);
     }
-    // check if the defender exists
-    if ($result->num_rows > 0) {
-        $defUser = $result->fetch_assoc();
+    
+    // Check if the defender exists
+    if ($stmt->rowCount() > 0) {
+        $defUser = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        // If defender is under protection you cannot attack that person...
+        // If defender is under protection you cannot attack that person
         if ($defUser['protection'] != 1) {
             
-            // Players can not attack a person of the same type
+            // Players cannot attack a person of the same type
             if ($defUser['type'] != $userData['type']) {
                 
-                // The player cannot attack himself...
+                // The player cannot attack himself
                 if ($defUser['username'] != $userData['username']) {
-                    $temp = $dbCon->query('SELECT * FROM temp WHERE userid = "' . $userData['id'] . '" AND variable = "' . $defUser['id'] . '" AND area = "attack"');
+                    $stmt = $dbCon->prepare('SELECT * FROM temp WHERE userid = :userid AND variable = :variable AND area = "attack"');
+                    $stmt->execute(['userid' => $userData['id'], 'variable' => $defUser['id']]);
                     
                     // You can attack the same player for max 5 times a day
-                    if ($temp->num_rows < 5) {
+                    if ($stmt->rowCount() < 5) {
                         
-                        // With pitty, players below a 1000 cash cannot be attacked
-                        if ($defUser['cash'] > '1000') {
+                        // With pity, players below a 1000 cash cannot be attacked
+                        if ($defUser['cash'] > 1000) {
                         
-                            // Check if the cooldown for attacks has past
-                            $cooldownCheck = $dbCon->query('SELECT * FROM temp WHERE userid = "' . $userData['id'] . '" AND area = "cooldown"
-                                                                                     AND (UNIX_TIMESTAMP(NOW()) - variable) < 10');
+                            // Check if the cooldown for attacks has passed
+                            $stmt = $dbCon->prepare('SELECT * FROM temp WHERE userid = :userid AND area = "cooldown" AND (UNIX_TIMESTAMP(NOW()) - variable) < 10');
+                            $stmt->execute(['userid' => $userData['id']]);
                            
-                            if ($cooldownCheck->num_rows < 1) {
+                            if ($stmt->rowCount() < 1) {
                                 // Insert into temp table for max attack count
-                                $dbCon->query('INSERT INTO temp (userid, variable, area) VALUES("' . $userData['id'] . '", "' . $defUser['id'] . '", "attack")');
+                                $stmt = $dbCon->prepare('INSERT INTO temp (userid, variable, area) VALUES(:userid, :variable, "attack")');
+                                $stmt->execute(['userid' => $userData['id'], 'variable' => $defUser['id']]);
 
-                                $outcome = ((($userData['attack_power'] + $userData['extra_attack_power']) * rand(90,115)) >= ($defUser['defence_power'] + $defUser['clicks'] * 5)* rand(90,115)) ? 1 : 0;
+                                $outcome = ((($userData['attack_power'] + $userData['extra_attack_power']) * rand(90,115)) >= ($defUser['defence_power'] + $defUser['clicks'] * 5) * rand(90,115)) ? 1 : 0;
                                 $moneyTaken = ($outcome == 1) ? (int)($defUser['cash'] * rand(40,75) / 100) : (int)($userData['cash'] * rand(25,40) / 100);
 
                                 if ($outcome == 1) {
-                                    // attacker won
-                                    $dbCon->query('UPDATE users SET cash = (cash - "' . $moneyTaken . '"), attacks_lost = (attacks_lost + 1) WHERE id = "' . $defUser['id'] . '"');
-                                    $dbCon->query('UPDATE users SET cash = (cash + "' . $moneyTaken . '"), attacks_won = (attacks_won + 1) WHERE id = "' . $userData['id'] . '"');
+                                    // Attacker won
+                                    $stmt = $dbCon->prepare('UPDATE users SET cash = cash - :money, attacks_lost = attacks_lost + 1 WHERE id = :defender_id');
+                                    $stmt->execute(['money' => $moneyTaken, 'defender_id' => $defUser['id']]);
+                                    
+                                    $stmt = $dbCon->prepare('UPDATE users SET cash = cash + :money, attacks_won = attacks_won + 1 WHERE id = :attacker_id');
+                                    $stmt->execute(['money' => $moneyTaken, 'attacker_id' => $userData['id']]);
 
                                     $tpl->assign('success', 'Je valt ' . $defUser['username'] . ' aan en je wint het gevecht! Je wint ' . $moneyTaken . ' in harde cash!');
                                 } else {
-                                    // attacker loser
-                                    $dbCon->query('UPDATE users SET cash = (cash + "' . $moneyTaken . '"), attacks_won = (attacks_won + 1) WHERE id = "' . $defUser['id'] . '"');
-                                    $dbCon->query('UPDATE users SET cash = (cash - "' . $moneyTaken . '"), attacks_lost = (attacks_lost + 1) WHERE id = "' . $userData['id'] . '"');
+                                    // Attacker lost
+                                    $stmt = $dbCon->prepare('UPDATE users SET cash = cash + :money, attacks_won = attacks_won + 1 WHERE id = :defender_id');
+                                    $stmt->execute(['money' => $moneyTaken, 'defender_id' => $defUser['id']]);
+                                    
+                                    $stmt = $dbCon->prepare('UPDATE users SET cash = cash - :money, attacks_lost = attacks_lost + 1 WHERE id = :attacker_id');
+                                    $stmt->execute(['money' => $moneyTaken, 'attacker_id' => $userData['id']]);
 
                                     $tpl->assign('error', 'Je valt ' . $defUser['username'] . ' aan en je had niet verwacht dat hij zo sterk was! Je verliest ' . $moneyTaken . '!');
                                 }
 
-                                // slow down the fast clickers with a 5 second cooldown
-                                $cooldown = $dbCon->query('SELECT * FROM temp WHERE userid = "'  . $userData['id'] . '" AND area = "cooldown"');
-                                if ($cooldown->num_rows > 0) {
-                                    $dbCon->query('UPDATE temp SET variable = UNIX_TIMESTAMP(NOW()) WHERE userid = "' . $userData['id'] . '" AND area = "cooldown"');
+                                // Slow down the fast clickers with a 5 second cooldown
+                                $stmt = $dbCon->prepare('SELECT * FROM temp WHERE userid = :userid AND area = "cooldown"');
+                                $stmt->execute(['userid' => $userData['id']]);
+                                
+                                if ($stmt->rowCount() > 0) {
+                                    $stmt = $dbCon->prepare('UPDATE temp SET variable = UNIX_TIMESTAMP(NOW()) WHERE userid = :userid AND area = "cooldown"');
+                                    $stmt->execute(['userid' => $userData['id']]);
                                 } else {
-                                    $dbCon->query('INSERT INTO temp (userid, variable, area) VALUES("' . $userData['id'] . '", UNIX_TIMESTAMP(NOW()), "cooldown")');
+                                    $stmt = $dbCon->prepare('INSERT INTO temp (userid, variable, area) VALUES(:userid, UNIX_TIMESTAMP(NOW()), "cooldown")');
+                                    $stmt->execute(['userid' => $userData['id']]);
                                 }
                             } else {
                                 $tpl->assign('error', 'Je bent nog moe van de vorige aanval!');
                             }
                         } else {
-                            $tpl->assign('error',$defUser['username'] . ' heeft al weinig geld, uit medelijden val je niet aan!');
+                            $tpl->assign('error', $defUser['username'] . ' heeft al weinig geld, uit medelijden val je niet aan!');
                         }
                     } else {
                         $tpl->assign('error', 'Je hebt ' . $defUser['username'] . ' al 5x aangevallen vandaag!');
                     }
                 } else {
-                    $tpl-assign('error', 'je slaat je zelf tegen je hoofd en valt flauw neer...');
+                    $tpl->assign('error', 'je slaat je zelf tegen je hoofd en valt flauw neer...');
                 }
             } else {
                 $tpl->assign('error', 'Je mag de zelfde type niet aanvallen, is een beetje cru, niet?');
@@ -102,4 +117,6 @@ if (isset($_GET['player']) OR isset($_GET['id'])) {
 } else {
     $tpl->assign('error', 'Geen speler ingevoerd.');
 }
+
 $tpl->display('ingame/attack.tpl');
+?>

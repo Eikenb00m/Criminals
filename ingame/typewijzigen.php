@@ -16,33 +16,38 @@
 
 require_once('../init.php');
 
-// Check if user is loggedin, if so no need to be here...
-if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); }
+// Check if user is logged in, if not redirect to login page
+if (!LOGGEDIN) {
+    header('Location: ' . ROOT_URL . 'index.php');
+    exit;
+}
 
 $form_error = '';
-$error = array();
+$error = [];
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset($_POST['type'])) {
         $error[] = 'Er is geen type opgegeven';
-    }
-    
-    elseif ($_POST['type'] < 1 OR $_POST['type'] > 3) {
+    } elseif ($_POST['type'] < 1 || $_POST['type'] > 3) {
         $error[] = 'Er is niet een correcte type opgegeven.';
-    }
-    elseif ($_POST['type'] == $userData['type']) {
+    } elseif ($_POST['type'] == $userData['type']) {
         $error[] = 'Je kan niet naar het type veranderen wat je al bent.';
     }
-    
+
     if (count($error) > 0) {
         foreach ($error as $item) {
-            $form_error .= '- ' . $item . '<br />';
+            $form_error .= '- ' . htmlspecialchars($item, ENT_QUOTES, 'UTF-8') . '<br />';
         }
         $tpl->assign('form_error', $form_error);
     } else {
-        // User wanne change his type, sure lets do this!
-        $result = $dbCon->query('UPDATE users SET type = "' . (int) addslashes($_POST['type']) . '" WHERE id = "' . $userData['id'] . '"');
-        $tpl->assign('success', 'Je bent succesvol overgestapt naar ' . $type[$_POST['type']]['name'] . '!');
+        // User wants to change his type
+        $stmt = $dbCon->prepare('UPDATE users SET type = :type WHERE id = :id');
+        $stmt->execute([
+            ':type' => (int) $_POST['type'],
+            ':id' => $userData['id']
+        ]);
+
+        $tpl->assign('success', 'Je bent succesvol overgestapt naar ' . htmlspecialchars($type[$_POST['type']]['name'], ENT_QUOTES, 'UTF-8') . '!');
     }
 }
 

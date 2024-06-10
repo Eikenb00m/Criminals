@@ -16,8 +16,8 @@
 
 require_once('../init.php');
 
-// Check if user is loggedin, if so no need to be here...
-if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); }
+// Check if user is logged in, if not, redirect to index page
+if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); exit; }
 
 $error = array();
 $form_error = '';
@@ -25,38 +25,34 @@ $form_error = '';
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (!isset($_POST['money'])) {
         $error[] = 'Je hebt geen bedrag aangegeven';
-    }
-    elseif(!ctype_digit($_POST['money'])) {
+    } elseif (!ctype_digit($_POST['money'])) {
         $error[] = 'Het ingegeven bedrag is niet numeriek.';
-    }
-    // Extra check for php overflow error, so that +/- bug cant be abused
-    elseif (strlen($_POST['money']) > 20) {
+    } elseif (strlen($_POST['money']) > 20) {
         $error[] = 'Het bedrag wat je hebt ingevoerd is abnormaal hoog!';
     }
     
-    if (!isset($_POST['withdraw']) AND !isset($_POST['deposit'])) {
-        $error[] = 'Je hebt niet aangegeven of je geld wilt opnemen of storen!';
+    if (!isset($_POST['withdraw']) && !isset($_POST['deposit'])) {
+        $error[] = 'Je hebt niet aangegeven of je geld wilt opnemen of storten!';
     } else {
+        $stmt = $dbCon->prepare('SELECT bank, cash FROM users WHERE session_id = :session_id');
+        $stmt->execute(['session_id' => $userData['session_id']]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
         if (isset($_POST['withdraw'])) {
-            $result = $dbCon->query('SELECT bank FROM users WHERE session_id = "' . $userData['session_id'] . '"');
-            $row = $result->fetch_assoc();
-        
             if ($row['bank'] < $_POST['money']) {
                 $error[] = 'Je hebt niet genoeg op de bank staan!';
             }
         } else {
-            $result = $dbCon->query('SELECT cash FROM users WHERE session_id = "' . $userData['session_id'] . '"');
-            $row = $result->fetch_assoc();
-        
             if ($row['cash'] < $_POST['money']) {
                 $error[] = 'Het bedrag wat je hebt aangegeven heb je niet in cash.';
             }
         }
-        
+
         if ($userData['bank_left'] < 1) {
             $error[] = 'Je kan vandaag geen stortingen meer maken!';
         }
     }
+    
     if (count($error) > 0) {
         foreach ($error as $item) {
             $form_error .= '- ' . $item . '<br />';
@@ -65,18 +61,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     } else {
         // We got a kom, now check if he won something...
         $money = (int) $_POST['money'];
-        $WithOrDep = (isset($_POST['withdraw']) ? 1 : 2);
+        $WithOrDep = isset($_POST['withdraw']) ? 1 : 2;
         
         // User wants to withdraw money
         if ($WithOrDep == 1) {
-            $dbCon->query('UPDATE users SET cash = (cash + ' . $money . '), bank = (bank - ' . $money . '), bank_left = (bank_left - 1) WHERE session_id = "' . $userData['session_id'] . '"');
+            $stmt = $dbCon->prepare('UPDATE users SET cash = cash + :money, bank = bank - :money, bank_left = bank_left - 1 WHERE session_id = :session_id');
         } else {
-            
-            $dbCon->query('UPDATE users SET cash = (cash - ' . $money . '), bank = (bank + ' . $money . '), bank_left = (bank_left - 1) WHERE session_id = "' . $userData['session_id'] . '"');
+            $stmt = $dbCon->prepare('UPDATE users SET cash = cash - :money, bank = bank + :money, bank_left = bank_left - 1 WHERE session_id = :session_id');
         }
+        $stmt->execute(['money' => $money, 'session_id' => $userData['session_id']]);
         
         $tpl->assign('success', 'Je hebt geld ' . ($WithOrDep == 1 ? 'opgenomen' : 'gestort') . '!');
     }
 }
 
 $tpl->display('ingame/bank.tpl');
+?>

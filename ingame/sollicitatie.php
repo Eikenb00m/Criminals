@@ -14,65 +14,61 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>. 
  */
 
-// Define website root dir
 require_once('../init.php');
 
-// Check if user is loggedin, if not no need to be here...
-if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); }
+// Check if user is logged in, if not redirect to login page
+if (!LOGGEDIN) {
+    header('Location: ' . ROOT_URL . 'index.php');
+    exit;
+}
 
 $formError = '';
-$error = array();
+$error = [];
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
-    if (!isset($_POST['function']) OR empty($_POST['function'])) {
-        $error[] = 'Je hebt geen functie aangegeven';
+    $requiredFields = [
+        'function' => 'Je hebt geen functie aangegeven',
+        'onlineHours' => 'Je hebt niet aangegeven hoeveel uur je online bent',
+        'goodQuality' => 'Je hebt je goede eigenschappen niet aangegeven',
+        'badQuality' => 'Je hebt je slechte eigenschappen niet aangegeven',
+        'reason' => 'Je hebt geen reden waarom je teamlid wilt worden aangegeven'
+    ];
+
+    foreach ($requiredFields as $field => $errorMsg) {
+        if (empty($_POST[$field])) {
+            $error[] = $errorMsg;
+        }
     }
-    
-    if (!isset($_POST['onlineHours']) OR empty($_POST['onlineHours'])) {
-        $error[] = 'Je hebt niet aangegeven hoeveel uur je online bent';
-    }
-    
-    if (!isset($_POST['goodQuality']) OR empty($_POST['goodQuality'])) {
-        $error[] = 'Je hebt je goede eigenschappen niet aangegeven';
-    }
-    
-    if (!isset($_POST['badQuality']) OR empty($_POST['badQuality'])) {
-        $error[] = 'Je hebt je slechte eigenschappen niet aangegeven';
-    }
-    
-    if (!isset($_POST['reason']) OR empty($_POST['reason'])) {
-        $error[] = 'Je hebt geen reden waarom je teamlid wilt worden aangegeven';
-    }
-    
+
     if (count($error) > 0) {
         foreach ($error as $item) {
-            $formError .= '- ' . $item . '<br />';
+            $formError .= '- ' . htmlspecialchars($item, ENT_QUOTES, 'UTF-8') . '<br />';
         }
         $tpl->assign('form_error', $formError);
     } else {
-        
-        //Prevent email injection
+
+        // Prevent email injection
         foreach ($_POST as $data => $post) {
-            $_POST[$post] = str_replace(array('\r', '\n', '%0a', '%0d'), '', stripslashes($data));
+            $_POST[$post] = str_replace(["\r", "\n", "%0a", "%0d"], '', stripslashes($data));
         }
-       
+
         $to = ROOT_EMAIL;
         $subject = 'Sollicitatie';
-        $message = $_POST['login'] . ' heeft gesolliciteerd via uw criminals.\n\n '
-                   . 'Zijn e-mail adres is:\n ' . $userData['emai'] . ' \n\n Hij zou graag de functie hebben van:\n '
-                   . '' . $_POST['function'] . '\n\n Hij is daarvoor zoveel uur per dag beschikbaar: \n '
-                   . '' . $_POST['onlineHours'] . '\n\n Zijn goede eigenschappen zijn:\n '
-                   . '' . $_POST['goodQuality'] . '\n\n En zijn slechte eigenschappen zijn:\n '
-                   . '' . $_POST['badQuality'] . '\n\n Hij wil deze functie om deze reden:\n '
-                   . '' . $_POST['reason'];
+        $message = htmlspecialchars($_POST['login'], ENT_QUOTES, 'UTF-8') . ' heeft gesolliciteerd via uw criminals.\n\n '
+                   . 'Zijn e-mail adres is:\n ' . htmlspecialchars($userData['email'], ENT_QUOTES, 'UTF-8') . ' \n\n Hij zou graag de functie hebben van:\n '
+                   . htmlspecialchars($_POST['function'], ENT_QUOTES, 'UTF-8') . '\n\n Hij is daarvoor zoveel uur per dag beschikbaar: \n '
+                   . htmlspecialchars($_POST['onlineHours'], ENT_QUOTES, 'UTF-8') . '\n\n Zijn goede eigenschappen zijn:\n '
+                   . htmlspecialchars($_POST['goodQuality'], ENT_QUOTES, 'UTF-8') . '\n\n En zijn slechte eigenschappen zijn:\n '
+                   . htmlspecialchars($_POST['badQuality'], ENT_QUOTES, 'UTF-8') . '\n\n Hij wil deze functie om deze reden:\n '
+                   . htmlspecialchars($_POST['reason'], ENT_QUOTES, 'UTF-8');
 
-        $headers = 'From: noreply@noreply.nl\r\n';
-        $headers .= 'Reply-To: noreply@noreply.nl\r\n';
-        $headers .= 'Return-Path: noreply@noreply.nl\r\n';
+        $headers = 'From: noreply@noreply.nl' . "\r\n" .
+                   'Reply-To: noreply@noreply.nl' . "\r\n" .
+                   'Return-Path: noreply@noreply.nl' . "\r\n";
 
-        if (mail($to,$subject,$message,$headers) ) {
-            $tpl->assign('success', 'Je hebt succesvol gesoliciteerd, het team neemt zo spoedig mogelijk contact met je op!');
+        if (mail($to, $subject, $message, $headers)) {
+            $tpl->assign('success', 'Je hebt succesvol gesolliciteerd, het team neemt zo spoedig mogelijk contact met je op!');
         } else {
             $tpl->assign('form_error', 'Er is een technische storing ontstaan, je sollicitatie is niet verstuurd!');
         }

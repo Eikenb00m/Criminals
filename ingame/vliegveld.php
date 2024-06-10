@@ -16,49 +16,55 @@
 
 require_once('../init.php');
 
-// Check if user is loggedin, if so no need to be here...
-if (LOGGEDIN == FALSE) { header('Location: ' . ROOT_URL . 'index.php'); }
+// Check if user is logged in, if not redirect to login page
+if (!LOGGEDIN) {
+    header('Location: ' . ROOT_URL . 'index.php');
+    exit;
+}
 
-$error = array();
+$error = [];
 $form_error = '';
 
-$country = $dbCon->query('SELECT setting_value FROM settings WHERE setting_id = 4 LIMIT 1')->fetch_assoc();
+// Get current country settings
+$stmt = $dbCon->prepare('SELECT setting_value FROM settings WHERE setting_id = 4 LIMIT 1');
+$stmt->execute();
+$country = $stmt->fetch(PDO::FETCH_ASSOC);
 $countryArray = json_decode($country['setting_value'], true);
 
 $tpl->assign('countryArray', $countryArray);
 $tpl->assign('currentCountry', $countryArray[$userData['country_id']]);
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-	if($userData['cash'] < 250) {
-		$error[] = 'Een ticket kost &euro; 250,- cash';
-	}
-	if(empty($_POST['country']) OR !isset($_POST['country'])) {
-		$error[] = 'Selecteer een land om waar je heen wilt vliegen.';
-	} else {
-		if(!isset($countryArray[$_POST['country']])) {
-			$error[] = 'Dit land bestaat niet!';
-		} else {
-			if($userData['country_id'] == $_POST['country']) {
-				$error[] = 'Je bent al in ' . $countryArray[$_POST['country']] . '!';
-			}
-		}
-	}
-	if (count($error) > 0) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if ($userData['cash'] < 250) {
+        $error[] = 'Een ticket kost &euro; 250,- cash';
+    }
+    if (empty($_POST['country']) || !isset($_POST['country'])) {
+        $error[] = 'Selecteer een land om waar je heen wilt vliegen.';
+    } else {
+        if (!isset($countryArray[$_POST['country']])) {
+            $error[] = 'Dit land bestaat niet!';
+        } else {
+            if ($userData['country_id'] == $_POST['country']) {
+                $error[] = 'Je bent al in ' . htmlspecialchars($countryArray[$_POST['country']], ENT_QUOTES, 'UTF-8') . '!';
+            }
+        }
+    }
+
+    if (count($error) > 0) {
         foreach ($error as $item) {
-            $form_error .= '- ' . $item . '<br />';
+            $form_error .= '- ' . htmlspecialchars($item, ENT_QUOTES, 'UTF-8') . '<br />';
         }
         $tpl->assign('form_error', $form_error);
     } else {
-        $result = $dbCon->query(' UPDATE
-                                        users
-                                    SET
-                                        cash = (cash - 250),
-                                        country_id = "' . addslashes($_POST['country']). '"
-                                    WHERE
-                                        id= "'. $userData['id']. '"');
-        
+        $stmt = $dbCon->prepare('UPDATE users SET cash = cash - 250, country_id = :country_id WHERE id = :id');
+        $stmt->execute([
+            ':country_id' => $_POST['country'],
+            ':id' => $userData['id']
+        ]);
+
         $tpl->assign('currentCountry', $countryArray[$_POST['country']]);
-        $tpl->assign('success', 'Je betaald 250 en bent nu in '. $countryArray[$_POST['country']] .'!');
+        $tpl->assign('success', 'Je betaald 250 en bent nu in '. htmlspecialchars($countryArray[$_POST['country']], ENT_QUOTES, 'UTF-8') . '!');
     }
 }
+
 $tpl->display('ingame/vliegveld.tpl');
